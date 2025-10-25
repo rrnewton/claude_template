@@ -199,6 +199,7 @@ Examples:
   %(prog)s --optimize 5         # All 5 iterations use optimization_task.md
   %(prog)s --general 5          # All 5 iterations use generic_forward_progress_task.md
   %(prog)s --tasks 5            # All 5 iterations use task_gardening.md
+  %(prog)s --only custom.md 5   # All 5 iterations use custom.md
         """
     )
 
@@ -215,8 +216,14 @@ Examples:
                                    help='Use only generic_forward_progress_task.md for all built-in prompts')
     prompt_type_group.add_argument('--tasks', action='store_true',
                                    help='Use only task_gardening.md for all built-in prompts')
+    prompt_type_group.add_argument('--only', type=str, metavar='PROMPT_FILE',
+                                   help='Use specified prompt file for ALL iterations')
 
     args = parser.parse_args()
+
+    # Validate --only is not used with positional prompts
+    if args.only and args.prompts:
+        parser.error("--only cannot be used with positional prompt arguments")
 
     # Setup paths
     script_dir = Path(__file__).parent
@@ -233,29 +240,47 @@ Examples:
     ]
 
     # Determine which prompt to use for built-in selections
-    if args.optimize:
+    if args.only:
+        only_prompt_path = Path(args.only)
+        if not only_prompt_path.exists():
+            parser.error(f"Prompt file not found: {args.only}")
+        fixed_prompt = only_prompt_path
+        prompt_mode = f"custom ({only_prompt_path.name})"
+        use_only_mode = True
+    elif args.optimize:
         fixed_prompt = prompt_dir / "optimization_task.md"
         prompt_mode = "optimization"
+        use_only_mode = False
     elif args.general:
         fixed_prompt = prompt_dir / "generic_forward_progress_task.md"
         prompt_mode = "general forward progress"
+        use_only_mode = False
     elif args.tasks:
         fixed_prompt = prompt_dir / "task_gardening.md"
         prompt_mode = "task gardening"
+        use_only_mode = False
     else:
         fixed_prompt = None
         prompt_mode = "random weighted selection"
+        use_only_mode = False
 
     # Convert custom prompts to Paths
     custom_prompts = [Path(p) for p in args.prompts]
     num_custom = len(custom_prompts)
 
-    if num_custom < args.iterations:
+    # Print mode message
+    if use_only_mode:
+        print(f"Using --only mode: {prompt_mode} for all {args.iterations} iterations\n")
+    elif num_custom < args.iterations:
         print(f"Built-in prompt mode: {prompt_mode}\n")
 
     # Run iterations
     for i in range(1, args.iterations + 1):
-        if i <= num_custom:
+        if use_only_mode:
+            # --only mode: use the specified prompt for ALL iterations
+            prompt_file = fixed_prompt
+            print(f"Using {prompt_mode} for iteration {i}")
+        elif i <= num_custom:
             # Use custom prompt
             prompt_file = custom_prompts[i - 1]
             print(f"Using custom prompt for iteration {i}: {prompt_file}")
