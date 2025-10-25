@@ -56,8 +56,36 @@ After I fold in the change from dedup:
     Date:   Sat Oct 25 14:48:51 2025 +0000
         Add --no-db mode: JSONL-only operation without SQLite
 
+Ok, I rebased on upstream main and currently b0b9c37 (current upstream)
+passes all tests and race detection. The tests are not using much CPU so I don't
+know what's happening. IT's USPER fast if it runs a second time (caching).
+IT looks like the rpc test takes 63 seconds..
 
+Wow killing the race tests in NOT responsive. It just ignores Ctrl-C.
+It's STILL not using much cpu. 
 
+7d7ca1c is my new commit, but while the prev commit passes tests (and race
+detection), this FAILS. 7d7ca1cd857f586c5938d8a0172b636a668fa0eb
+
+-----
+
+There's more work to do `go test ./...` shows test failures. Please debug and 
+amend this commit.
+
+The partly-fixed version is 10ce3cfd39733a1e9ed19f07c7b8fc507c981f06
+- fixed a couple file paths, and added two missing methods.
+
+Crazy how it wants to declare this a pre-existing failure when it is DIRECTLY
+caused be the functionality we changed.  I guess it was confused because I did
+the rebase without telling it.
+
+  - ✗ github.com/steveyegge/beads/cmd/bd: 1 pre-existing failure (TestAutoFlushErrorHandling)
+
+Now the fixed commit is e370aae1fafb11ff5a71dd420c0be76e3099b47d
+
+git diff -r 10ce3cfd39733a1e9ed19f07c7b8fc507c981f06 -r e370aae1fafb11ff5a71dd420c0be76e3099b47d
+
+UH dunno if this is good.
 
 TODO: Make writing the file more atomic
 ----------------------------------------
