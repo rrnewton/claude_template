@@ -1,8 +1,12 @@
 
 SLOT=$(shell cat slot.txt)
-USER=node
+USER=ubuntu
 
 TAG := $(shell cat project_name.txt)
+
+ifeq ($(strip $(TAG)),)
+    $(error TAG must be set (from project_name.txt) and not empty!)
+endif
 
 OS := $(shell uname)
 
@@ -37,12 +41,19 @@ Dockerfile: Dockerfile.prefix Dockerfile.project
 .session_title.txt:
 	echo $(TAG)-`hostname` > $@
 
+# Use my tweaked version of happy if it's available
 happy: .session_title.txt
-	happy claude --dangerously-skip-permissions "Tell happy to change the title to "`cat .session_title.txt`
+	TITLE=`cat $^` && cd .. && \
+	hits=$$(happy -h | grep '\-\-uname'); \
+	if [ -z "$$hits" ]; then \
+	  happy --name "$$TITLE" claude --dangerously-skip-permissions; else \
+	  happy claude --dangerously-skip-permissions "Tell happy to change the title to $$TITLE"; \
+	fi
 
 # Usually from outside the container, to pass it in:
 install-pat: home/.github/PAT.txt
 home/.github/PAT.txt:
+	mkdir home/.github
 	@if ! [ -z "$(GITHUB_PERSONAL_ACCESS_TOKEN)" ]; then \
 		echo "$(GITHUB_PERSONAL_ACCESS_TOKEN)" > home/.github/PAT.txt; \
 	elif [ -f ~/.github/PAT.txt ]; then \
@@ -70,4 +81,18 @@ outside-setup: install-pat
 
 inside-setup: claude-github claude-beads install-ssh-deploy-key
 
-.PHONY: claude-beads claude-github setup-claude happy run build root install-pat
+# Pull and rebase any upstream changes to the central config on the main branch.
+pull-main:
+	git diff --exit-code || \
+	(echo "Please commit or stash your changes before pulling." && exit 1) && \
+	BRANCH=`git branch --show-current` && \
+	git checkout main && \
+	git pull origin main && \
+	git checkout $$BRANCH && \
+	git merge main
+
+move-to-main:
+	git stash && git checkout main && git stash pop
+
+.PHONY: claude-beads claude-github setup-claude happy run build root pull-main \
+   inside-setup outside-setup install-pat install-ssh-deploy-key
