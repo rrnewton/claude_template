@@ -4,6 +4,10 @@ USER=node
 
 TAG := $(shell cat project_name.txt)
 
+ifeq ($(strip $(TAG)),)
+    $(error TAG must be set (from project_name.txt) and not empty!)
+endif
+
 OS := $(shell uname)
 
 ifeq ($(OS),Darwin)
@@ -38,7 +42,8 @@ Dockerfile: Dockerfile.prefix Dockerfile.project
 	echo $(TAG)-`hostname` > $@
 
 happy: .session_title.txt
-	happy claude --dangerously-skip-permissions "Tell happy to change the title to "`cat .session_title.txt`
+	TITLE=`cat $^` && cd .. && \
+	happy claude --dangerously-skip-permissions "Tell happy to change the title to $$TITLE"
 
 # Usually from outside the container, to pass it in:
 install-pat: home/.github/PAT.txt
