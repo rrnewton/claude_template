@@ -196,6 +196,9 @@ Examples:
   %(prog)s 5 task1.md           # Iteration 1 uses task1.md, 2-5 random built-ins
   %(prog)s 5 t1.md t2.md        # Iterations 1-2 use custom, 3-5 random built-ins
   %(prog)s --happy 5            # Use happy wrapper with session title from .session_title.txt
+  %(prog)s --optimize 5         # All 5 iterations use optimization_task.md
+  %(prog)s --general 5          # All 5 iterations use generic_forward_progress_task.md
+  %(prog)s --tasks 5            # All 5 iterations use task_gardening.md
         """
     )
 
@@ -203,6 +206,15 @@ Examples:
     parser.add_argument('prompts', nargs='*', help='Optional prompt files for first N iterations')
     parser.add_argument('--happy', action='store_true',
                         help='Use happy wrapper (reads session title from .session_title.txt)')
+
+    # Mutually exclusive group for prompt type selection
+    prompt_type_group = parser.add_mutually_exclusive_group()
+    prompt_type_group.add_argument('--optimize', action='store_true',
+                                   help='Use only optimization_task.md for all built-in prompts')
+    prompt_type_group.add_argument('--general', action='store_true',
+                                   help='Use only generic_forward_progress_task.md for all built-in prompts')
+    prompt_type_group.add_argument('--tasks', action='store_true',
+                                   help='Use only task_gardening.md for all built-in prompts')
 
     args = parser.parse_args()
 
@@ -220,9 +232,26 @@ Examples:
         for weight, filename in BUILTIN_PROMPTS
     ]
 
+    # Determine which prompt to use for built-in selections
+    if args.optimize:
+        fixed_prompt = prompt_dir / "optimization_task.md"
+        prompt_mode = "optimization"
+    elif args.general:
+        fixed_prompt = prompt_dir / "generic_forward_progress_task.md"
+        prompt_mode = "general forward progress"
+    elif args.tasks:
+        fixed_prompt = prompt_dir / "task_gardening.md"
+        prompt_mode = "task gardening"
+    else:
+        fixed_prompt = None
+        prompt_mode = "random weighted selection"
+
     # Convert custom prompts to Paths
     custom_prompts = [Path(p) for p in args.prompts]
     num_custom = len(custom_prompts)
+
+    if num_custom < args.iterations:
+        print(f"Built-in prompt mode: {prompt_mode}\n")
 
     # Run iterations
     for i in range(1, args.iterations + 1):
@@ -231,9 +260,14 @@ Examples:
             prompt_file = custom_prompts[i - 1]
             print(f"Using custom prompt for iteration {i}: {prompt_file}")
         else:
-            # Randomly select from built-in prompts based on weights
-            prompt_file = select_weighted_prompt(builtin_prompts)
-            print(f"Using built-in prompt for iteration {i}: {prompt_file.name}")
+            # Use fixed prompt if specified, otherwise randomly select
+            if fixed_prompt:
+                prompt_file = fixed_prompt
+                print(f"Using {prompt_mode} prompt for iteration {i}: {prompt_file.name}")
+            else:
+                # Randomly select from built-in prompts based on weights
+                prompt_file = select_weighted_prompt(builtin_prompts)
+                print(f"Using built-in prompt for iteration {i}: {prompt_file.name}")
 
         # Run the iteration
         success = run_iteration(i, args.iterations, prompt_file, logs_dir, args.happy, script_dir)
