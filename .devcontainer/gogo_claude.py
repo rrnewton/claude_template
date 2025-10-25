@@ -93,7 +93,7 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
     if use_happy:
         # Use happy wrapper
         session_title = get_session_title(script_dir)
-        
+
         # Check if happy supports --name flag
         if check_happy_version():
             # Newer version with --name support
@@ -201,7 +201,7 @@ Examples:
 
     parser.add_argument('iterations', type=int, help='Number of iterations to run')
     parser.add_argument('prompts', nargs='*', help='Optional prompt files for first N iterations')
-    parser.add_argument('--happy', action='store_true', 
+    parser.add_argument('--happy', action='store_true',
                         help='Use happy wrapper (reads session title from .session_title.txt)')
 
     args = parser.parse_args()
