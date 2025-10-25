@@ -4,6 +4,16 @@
 ===========================================
 
 
+TODO[beads] provide `bd edit ID` subcommand
+----------------------------------------
+
+As a human, it's annoying to have to edit beads issues using `bd
+update`.  Instead, provide a `bd edit` command that opens $EDITOR to
+edit the issue.  `bd edit --description` should be the default, but
+add other options like `--title` to match the format of `bd update`.
+
+
+
 Ambitious new feature `bd --no-db` mode
 -------------------------------------
 
