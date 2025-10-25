@@ -1,0 +1,6 @@
+
+# Install Java
+USER root
+RUN apt-get install -y maven openjdk-21-jdk-headless
+
+USER $MYUSER
