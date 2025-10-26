@@ -3,6 +3,8 @@ Work on expanding the heuristic AI towards parity with the Java version.
 
 The testing strategy will be similar to test_royal_assassin_with_log_capture (or the shell script e2e tests/*.sh), we need to set up specific scenarios and verify the actions. Continue to use a greater variety of cards up to 4ED with more triggered and keyword abilities. Activate until we are running tests with real board states with the real cards loaded from the card database.
 
+Do NOT port the code around fixed-depth forward simulation in Java. That we're going to handle differently (with our undo log). But we're going to try to get everything else working for an evaluation of our choices at a given instant.
+
 But before we do let's make sure we start in a clean state, as
 described in CLAUDE.md.
 
