@@ -17,7 +17,13 @@ RUN cargo install cargo-heaptrack cargo-nextest
 RUN apt-get install -y golang
 RUN mkdir -p /opt/local/bin && \
     export GOBIN="/opt/local/bin" && \
-    go install github.com/steveyegge/beads/cmd/bd@latest
+    git clone https://github.com/rrnewton/beads /tmp/beads && \
+    cd /tmp/beads && git checkout rrn-main && \
+    go build -o /opt/local/bin/bd ./cmd/bd
+
+# This would be easier but gets an error.
+#    go install github.com/rrnewton/beads/cmd/bd@rrn-main
+#    go install github.com/steveyegge/beads/cmd/bd@latest
 
 RUN apt-get install -y gnuplot psmisc # for killall
 
