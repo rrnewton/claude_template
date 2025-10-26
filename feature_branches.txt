@@ -1,0 +1,5 @@
+bd-edit
+bd-show-numeric
+multishow
+no-db
+rename-repair
