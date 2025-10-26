@@ -19,7 +19,7 @@ RUN mkdir -p /opt/local/bin && \
     export GOBIN="/opt/local/bin" && \
     go install github.com/steveyegge/beads/cmd/bd@latest
 
-RUN apt-get install -y psmisc # for killall
+RUN apt-get install -y gnuplot psmisc # for killall
 
 ENV IS_SANDBOX=1
 # USER $MYUSER
