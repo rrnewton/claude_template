@@ -410,6 +410,60 @@ Issue "locking" protocol:
    `issue-xyz.md*` files mean the issue is "busy/taken" and not try to clobber it.
 
 
+--------
+
+I cannot get a simple e2e test to work:
+
+```
+$ cd beads; go build -o bd ./cmd/bd
+$ cd ../fresh_test
+$ ../beads/bd init --backend=markdown # succeeds
+$ ../beads/bd list
+Error: failed to open database: failed to ping database: unable to open database file: out of memory (14)
+# Couldn't attempt `../beads/bd create "test issue"`
+```
+
+We should probably have an e2e test to this effect.
+
+----
+
+It works for me but listing issues is remarkably slow. Even running repeatedly.
+What are we doing?  Running find on this mostly empty directory takes 2ms.
+
+```
+$ time ../beads/bd list
+Found 0 issues:
+real	0m5.019s
+user	0m0.012s
+sys	0m0.027s
+
+$ time find .beads/markdown.db/ > /dev/null
+real	0m0.002s
+user	0m0.001s
+sys	0m0.001s
+```
+
+
+TODO: keep adding unsupported features in --no-db mode
+========================================
+
+I currently get this error when attempting repair.
+
+```
+$ bd rename-prefix mtg- --repair
+✗ Multiple prefixes detected in database:
+  - mtg: 71 issues
+  - vc: 7 issues
+  - workspace: 2 issues
+
+Repairing database with multiple prefixes...
+  Issues with correct prefix (mtg): 71 (highest: mtg-71)
+  Issues to repair: 9
+
+Error: failed to repair prefixes: failed to update issue vc-1 -> mtg-72: UpdateIssueID not supported in --no-db mode
+```
+
+
 TODO: add a way to change labels from bd update
 ========================================
 
