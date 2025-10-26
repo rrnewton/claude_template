@@ -443,6 +443,176 @@ user	0m0.001s
 sys	0m0.001s
 ```
 
+----
+
+If I switch into a directory with an existing `.beads/issues.jsonl` (but no
+database files in either backend), and I try to list the beads, I have this problem:
+
+```
+$ cd corruption_test
+$ cat .beads/config.yaml
+no-db: false
+backend: markdown
+issue-prefix: "mtg-"
+
+$ ../beads/bd list
+Error: failed to open storage: failed to create issues directory: mkdir /home/newton/work/beads-dev/devbeads/corruption_test/.beads/corruption_test.db: not a directory
+```
+
+It's trying to use the directory as the prefix rather than using the issue
+prefix from the config.
+
+-----
+
+Ok, this is great, let's keep going. If I have a checkout that has an
+`issues.jsonl` but no database, I am not able to auto-populate it the way we can
+with the SQL lite database backend:
+
+```
+$ ../beads/bd list
+Auto-import failed: import requires SQLite storage backend
+```
+
+Fix that code path.
+
+----
+
+The import code may work, but I cannot test it because even though the
+issue-prefix is set in the config.yaml, in markdown mode we cannot find it:
+
+```
+$ cat .beads/config.yaml
+# Beads Configuration
+# no-db: true
+no-db: false
+backend: markdown
+issue-prefix: "mtg-"
+[newton@newton-fedora-MZ01GC9H ~/work/beads-dev/devbeads/corruption_test (markdown-init-flag)]
+$ ../beads/bd list
+Auto-import failed: failed to get configured prefix: key not found: issue_prefix
+
+Found 0 issues:
+```
+
+---
+
+What is the documentation around config.yaml in this project? Does it describe
+it as a file configured by the human / checked into git, or as internal storage managed by the bd CLI?
+
+
+
+done: bd init should respect config.yaml
+----------------------------------------
+
+Unless this contradicts some existing documentation in the project, I think if
+bd init starts up and there is ALREADY a .beads/config.yaml, e.g. from version
+control, it should be RESPECTED not CLOBBERED.
+
+So, if we say `bd init` and we haven't provided flags for `--no-db` or
+`--backend=`, what's in the config should take precedence.  In fact, if we
+provide a flag and it contradicts what's in the config, we should ERROR instead
+of picking a winner.
+
+
+TODO: Manual testing shows issues with update
+--------------------
+
+You can use my `/workspace/corruption_test` directory for some manual testing.
+When I attempt an update it goes through, but it also mentions a non-fatal error
+failing to update:
+
+```
+$ ../beads/bd update mtg-64 --notes yayayayy
+Auto-import failed: error updating issue mtg-58: failed to apply updates: invalid type for assignee: expected string
+✓ Updated issue: mtg-64
+```
+
+Can you track this down?
+
+----
+
+```
+$ ../beads/bd create foobar --description yayay
+Auto-import failed: error updating issue mtg-58: failed to apply updates: invalid type for status: expected string
+✓ Created issue: corrupt-1
+  Title: foobar
+  Priority: P2
+  Status: open
+```
+
+TODO: Syncing markdown db => json not implemened
+------
+
+Since markdown is an alternate backend, we need, at least optionally, to be able
+to maintain the same relationship to the issues.jsonl export of the data that
+the sqllite backend does. So this should work:
+
+```
+../beads/bd sync --flush-only
+Error exporting: failed to get dependencies: not yet implemented
+```
+
+After bidirectional updates from json <> markdown work,
+we should also be expanding our test coverage so more of the standard e2e tests work
+with both the sqllite and markdown backends.
+
+AND THEN, when that's committed and we're in good shape, passing tests, we need
+to recognize that it really makes NO SENSE to maintain both json and markdown,
+because we would not get the benefits of better merge conflict resolution.
+
+To support this use case, let's add a config parameter that completely turns
+off any uses of the json export, making the backend the source-of-truth for
+our issues always:
+
+```config.yaml
+no-json: true
+```
+
+This may be a substantial architecutural change, because it means everywhere
+the json data store is referenced needs to be deactivated. But this will let us
+run with our desired combination:
+
+```config.yaml
+no-json: true
+backend: markdown
+```
+
+Note that if the user configures `no-db` and `no-json` we should error
+immediately, because the data needs to go somewhere!
+
+TODO: plan for daemon markdown mode
+------------
+
+Help me figure out what the policy on the daemon should be for the markdown
+backend. First describe for me what the current logic is for the daemon
+launching. Also, try to find the code for the mcp-beads MCP server and claude
+plugin.  That is a prime use case for the daemon I believe, but tell me how/when/where it
+invokes the actual bd binary.
+
+We need to decide whether we want to keep the same daemon approach with
+markdown, or just have it called on demand as a new bd command every time. There
+may be some performance advantages to the daemon if it can keep things in
+memory. But that's a tradeoff, because we want it to be careful about being
+robust to external changes to the markdown files. So any assumptions it makes
+about the state of disk should be validate when it touches the disk (e.g.
+recording mod times and seeing if the markdown files have been externally
+changed invalidating any cache).
+
+This is a complex space, so let's gather intel and plan things first.
+
+---
+
+Ok great, no daemon for markdown. As long as the MCP server has a way to run
+without the daemon, then let's definitely take backend=markdown to imply
+BEADS_NO_DAEMON=1. That would also imply that we error on
+`auto-start-daemon=true` in the config file combined with `backend=markdown`
+because that is an unsupported combination.
+
+I will test that the mcp server is still able to interact with beads even with a
+markdown backend.
+
+
+
 
 TODO: keep adding unsupported features in --no-db mode
 ========================================

@@ -1,3 +1,3 @@
 backend: markdown
-issue-prefix: fresh_test
+issue-prefix: fresh
 no-db: false

@@ -1,2 +1,4 @@
-# Beads Configuration
-no-db: true
+backend: markdown
+issue-prefix: corrupt
+no-db: false
+# no-json: true
