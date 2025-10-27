@@ -1,6 +1,7 @@
 
 SLOT=$(shell cat slot.txt)
 USER=ubuntu
+CACHEBUST=0
 
 TAG := $(shell cat project_name.txt)
 
@@ -18,8 +19,9 @@ else
     CONTAINER= echo Unsupported_OS && exit 1
 endif
 
+# `make CACHEBUST="$(date +%s)" build` to force rebuild.
 build: Dockerfile
-	$(CONTAINER) build -t $(TAG)-$(SLOT) .
+	$(CONTAINER) build -t $(TAG)-$(SLOT) --build-arg CACHEBUST=$(CACHEBUST) .
 
 run:
 	$(CONTAINER) run -it --rm -u $(USER) \
