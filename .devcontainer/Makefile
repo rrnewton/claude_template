@@ -1,7 +1,6 @@
 
 SLOT=$(shell cat slot.txt)
 USER=ubuntu
-CACHEBUST=0
 
 TAG := $(shell cat project_name.txt)
 FULLTAG := $(TAG)-$(SLOT)
