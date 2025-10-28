@@ -81,7 +81,7 @@ home/.ssh/id_rsa.pub:
 
 # From inside the container:
 claude-github:
-	claude mcp add --transport http github https://api.githubcopilot.com/mcp -H "Authorization: Bearer $$GITHUB_PERSONAL_ACCESS_TOKEN"
+	claude mcp add --transport http github https://api.githubcopilot.com/mcp -H "Authorization: Bearer $(GITHUB_PERSONAL_ACCESS_TOKEN)"
 
 # From inside the container:
 claude-beads:
