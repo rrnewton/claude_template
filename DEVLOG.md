@@ -611,6 +611,14 @@ because that is an unsupported combination.
 I will test that the mcp server is still able to interact with beads even with a
 markdown backend.
 
+----
+
+TODO: Analyze the completeness of markdown backend
+========================================
+
+Search over the code for any TODOs or errors that bail out with an "unsupported"
+message. Update our MARKDOWN_BACKEND_PLAN with the current status and remaining
+tasks. Get to work on closing the gap.
 
 
 
@@ -636,6 +644,231 @@ Error: failed to repair prefixes: failed to update issue vc-1 -> mtg-72: UpdateI
 
 TODO: add a way to change labels from bd update
 ========================================
+
+
+
+Working on staging the markdown-backend commit
+================================================================================
+
+Here's its commit summary:
+
+```
+    Add markdown backend for human-readable, git-friendly issue storage
+
+    Implements a new file-based storage backend using individual .md files
+    per issue with YAML frontmatter and markdown sections. Each issue becomes
+    a self-contained, human-readable file that's easy to read, edit, and merge.
+
+    Key Features:
+    - Drop-in replacement for SQLite via storage.Storage interface
+    - YAML frontmatter for structured data (status, priority, dependencies)
+    - Markdown sections for long-form content (description, design, notes)
+    - PID-based file locking for concurrency safety
+    - Embedded dependencies in each issue's frontmatter
+    - Event logging via JSONL append-only logs
+    - Counter-less ID generation (scans files to find max ID)
+
+    Backend Selection:
+    - Configure via .beads/config.yaml: backend: markdown
+    - Or use --backend flag: bd init --backend markdown
+    - MCP server auto-detects backend from config.yaml
+
+    Configuration Enhancements:
+    - issue-prefix now global config setting (eliminates backend-specific storage)
+    - Unified config management via Viper with env var support
+    - Backward compatibility for old config key names
+
+    Integration:
+    - MCP server supports markdown backend via database discovery
+    - Added pyyaml dependency for config.yaml parsing in Python
+    - Memory backend implements hash tracking methods for interface compliance
+
+    Known Issues (to be addressed in follow-up PRs):
+    - --no-db mode still uses nodb_prefix.txt instead of config.yaml
+    - Config.yaml changes should be separated into standalone feature branch
+    - DRY violations in issue ID parsing functions across multiple files
+
+    Testing:
+    - Comprehensive unit tests for locking, parsing, and storage operations
+    - Integration tests pending for concurrent writers
+    - Performance acceptable for repos with <500 issues
+
+    Documentation:
+    - ai_docs/MARKDOWN_BACKEND.md - comprehensive design document
+    - MARKDOWN_BACKEND_PLAN.md - original implementation plan
+
+    Migration:
+    - Export from SQLite: bd export -o issues.jsonl
+    - Init markdown: bd init --backend markdown
+    - Import to markdown: bd import -i issues.jsonl
+
+ .beads/beads.jsonl                             | 172 ++--------------------------
+ .beads/config.yaml                             |   2 +
+ .beads/issues.jsonl                            | 172 ++--------------------------
+ CONFIG.md                                      |   3 +-
+ MARKDOWN_BACKEND_PLAN.md                       | 567 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ ai_docs/MARKDOWN_BACKEND.md                    | 829 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ beads.go                                       |  29 +++--
+ beads_test.go                                  |  62 ----------
+ cmd/bd/config_test.go                          |  30 +----
+ cmd/bd/export.go                               |   7 ++
+ cmd/bd/import.go                               |   7 ++
+ cmd/bd/import_phases.go                        |  39 +++----
+ cmd/bd/import_shared.go                        |  67 +++++------
+ cmd/bd/init.go                                 | 191 +++++++++++++++++++++++++------
+ cmd/bd/init_test.go                            |  95 +++++++--------
+ cmd/bd/main.go                                 | 325 +++++++++++++++++++++++++++++++++++++++++++---------
+ cmd/bd/main_test.go                            |  38 ++++--
+ cmd/bd/nodb.go                                 | 200 ++++++++++++++++++++++++++++++++
+ cmd/bd/rename_prefix.go                        | 248 ++++++++++++++++++++++++++++++++++++++--
+ cmd/bd/rename_prefix_repair_test.go            | 100 ++++++++++++++++
+ cmd/bd/rename_prefix_test.go                   |  50 ++++++--
+ cmd/bd/renumber.go                             |   2 +-
+ cmd/bd/sync.go                                 |   7 ++
+ cmd/bd/test_helpers.go                         |  72 ++++++++++++
+ go.mod                                         |   1 +
+ integrations/beads-mcp/pyproject.toml          |   1 +
+ integrations/beads-mcp/src/beads_mcp/server.py |  45 ++++++--
+ internal/config/config.go                      | 121 +++++++++++++++++++-
+ internal/storage/markdown/format.go            | 261 ++++++++++++++++++++++++++++++++++++++++++
+ internal/storage/markdown/lock.go              | 242 +++++++++++++++++++++++++++++++++++++++
+ internal/storage/markdown/storage.go           | 970 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ internal/storage/markdown/storage_test.go      | 307 +++++++++++++++++++++++++++++++++++++++++++++++++
+ internal/storage/markdown/stubs.go             | 810 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ internal/storage/markdown/update.go            | 240 ++++++++++++++++++++++++++++++++++++++
+ internal/storage/memory/memory.go              | 920 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ internal/storage/sqlite/counter_import_test.go |  10 +-
+ internal/storage/sqlite/counter_sync_test.go   |  21 +---
+ internal/storage/sqlite/lazy_init_test.go      |  87 +++++---------
+ internal/storage/sqlite/migration_test.go      |  12 --
+ internal/storage/sqlite/sqlite.go              |  25 ++--
+ internal/storage/sqlite/sqlite_test.go         |  41 ++++++-
+ 41 files changed, 6652 insertions(+), 776 deletions(-)
+```
+
+Now let's return to our huge commit on feature-markdown-backend-squashed.
+In response to your current commit message there:
+
+- remove MARKDOWN_BACKEND_PLAN
+
+- Configuration enhancements can go in their own branch. Let's stage those
+  changes first, then that will become a new branch while the rest of these
+  changes go on top.
+
+- Remove mention of those known issues on OTHER branches, we will fix them there.
+  We want this branch to stand alone.
+
+- When we're done with that, we'll still have the rest of the changes as one huge commit.
+  Start to identify different ways that we could break apart these changes into a few sensible pieces.
+  Here's an initial suggestion for a plan:
+    (1) All prereq work, including shifting to a common Storage interface and any
+        changes to the existing backend.
+    (2) The markdown backend as a separate change that MINIMALLY touches the rest
+        of the code, and primarily just adds new files implementing the new backend.
+
+
+It's response
+----
+
+```
+  main
+  └── feature-config-enhancements (standalone, can merge first)
+      └── feature-markdown-backend-squashed
+          ├── Commit 1: Config infrastructure ←
+          ├── Commit 2: Backend abstraction
+          └── Commit 3: Markdown implementation
+```
+
+
+TODO: Serious testing for alternate backends
+================================================================================
+
+Summarize the current state of testing for me.
+
+
+================================================================================
+
+You can backup the current feature-rename-repair by tagging it
+feature-rename-repair.v1, but then go ahead and squash those changes into one
+commit and remove any evidince of intermediate states or decisions.
+
+Do briefly mention the results of a test run ()`go test ./...`) in the
+commit message. Always do this.
+
+----
+
+TRASH: DRY: don't define the defaults in two places in the file. Put the table in one place and then reference it when calling SetDefault.
+
+- WriteConfig doesn't seem to be used in this commit. We can just delete it.
+ - removing that will remove the duplicate occurenes of the defaults in this file
+
+- Issue-prefix could have a default "issue" but it cannot be empty "".
+- the json => json-output can be split into another minor commit.
+- the backend option shouldn't be here (that's part of adding the markdown backend)
+- remove backwards compatibility / migration of old option names for now
+
+Fixing CI
+------
+> When you're done with that, fetch upstream/main, rebase on upstream/main, and squash to one commit so it is ready for me to force-push for the PR to test on CI again.
+
+
+
+
+
+New idea for feature-config-enhancement
+================================================================================
+
+The branch feature-config-enhancements has gotten in a bad state and is pretty useless.
+- spurious change to CONFIG.md
+- spurious .beads/config.yaml change
+- spurious dependency change
+
+Tag the current one feature-config-enhancements.v1 and let's try again.
+
+Let's start over and make a config improvement in several clear commits.
+
+ - Config validation: find a config.yaml as we startup/discover the .beads dir.
+   Read it and validate it. Issue warnings if any keys are present that are not supported.
+
+ - Standardize on issue-prefix in config.yaml, banish ALL mentions if issue_prefix
+   in docs or code.
+
+ - Make config.yaml mandatory, if it does not exist during any beads operation
+   create it, using the default values with comments explaining each field. But
+   make sure to never clobber someones existing config.yaml (only issue errors
+   or warnings about its contents).
+
+ - SOT: make config.yaml the source of truth for configuration. Make
+   issue-prefix mandatory in every config.yaml, remove any other heuristics for
+   guessing or discovering it. Remove any storage of / reading of prefix from
+   the SQLlite storage backend because it should refer to the canonical source
+   of truth in config.yaml.
+
+Store the result as the new feature-config-enhancement branch.
+
+
+Alternative design for markdown storage
+================================================================================
+
+feature-markdown-backend-squashed contains an implementation of the SUBSTANTIAL
+markdown backend feature.
+
+However, I think it was a mistake and we should bulid an alternate design.
+We're going to build that on a `feature-markdown` branch.
+
+The beads architecture had a "durable serialization + live database" split and
+the current branch replaces the DB/backend rather than the JSON serialization.
+An alternate way to structure this would be to replace the JSON with markdown as
+the "durable" side of the equation, and then just disable the daemon+sqlite.
+(Note that would also make it possible to run markdown+sqlite (instead of
+json+sqlite) which may be useful, unlike json+markdown which I can't imagine
+anyone wanting!)
+
+The first phase is to generalize the interface 
+
+
+./issues/
+
 
 
 
