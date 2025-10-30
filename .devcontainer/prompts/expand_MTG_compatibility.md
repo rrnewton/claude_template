@@ -13,7 +13,10 @@ close. If it's already closed, select something else to do from the
 issue tracker.
 
 But before we begin work let's make sure we start in a clean state, as
-described in CLAUDE.md. Review the context:
+described in CLAUDE.md. If validate doesn't pass to start with then
+fixing that is your first task.
+
+Review the context:
 
 - CLAUDE.md
 - PROJECT_VISION.md
