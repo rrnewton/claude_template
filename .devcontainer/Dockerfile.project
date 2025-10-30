@@ -50,3 +50,8 @@ ENV PATH="$PATH:/opt/cargo/bin"
 # In Claude Code
 # /plugin marketplace add steveyegge/beads
 # /plugin install beads
+
+# Create symlink from custom WORKDIR to /workspace
+ARG WORKDIR=/workspace
+RUN if ! [ -d "$WORKDIR" ]; then ln -s /workspace ${WORKDIR} || true; fi
+WORKDIR ${WORKDIR}
