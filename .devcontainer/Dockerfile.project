@@ -21,11 +21,13 @@ RUN apt-get install -y gnuplot psmisc
 # To force rebuild from here, pass --build-arg CACHEBUST=$(date +%s), 
 ARG CACHEBUST
 
-RUN mkdir -p /opt/local/bin && \
-    export GOBIN="/opt/local/bin" && \
-    git clone https://github.com/rrnewton/beads /tmp/beads && \
-    cd /tmp/beads && git checkout rrn-main &&  \
-    go build -o /opt/local/bin/bd ./cmd/bd
+RUN cargo install --git https://github.com/rrnewton/minibeads --tag v0.1
+
+# RUN mkdir -p /opt/local/bin && \
+#     export GOBIN="/opt/local/bin" && \
+#     git clone https://github.com/rrnewton/beads /tmp/beads && \
+#     cd /tmp/beads && git checkout rrn-main &&  \
+#     go build -o /opt/local/bin/bd ./cmd/bd
 #  This would be easier but gets an error.
 #    go install github.com/rrnewton/beads/cmd/bd@rrn-main
 #    go install github.com/steveyegge/beads/cmd/bd@latest
