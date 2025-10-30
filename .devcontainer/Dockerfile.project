@@ -17,7 +17,7 @@ RUN cargo install cargo-nextest
 # RUN apt-get install -y heaptrack
 # RUN cargo install cargo-heaptrack
 
-ENV PATH="$PATH:/workspace/target/debug"
+ENV PATH="$PATH:/workspace/target/debug:/workspace/beads"
 
 # Still don't have volume mount ownership worked out.
 # USER ubuntu

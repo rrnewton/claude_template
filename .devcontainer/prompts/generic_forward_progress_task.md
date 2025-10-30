@@ -1,12 +1,11 @@
 
-We're going to work on a task.
+Pick a task from the backlog and work on it.
 
-But before we do let's make sure we start in a clean state, as
-described in CLAUDE.md.
+Make sure we start in a clean state and follow the workflow in CLAUDE.md.
 
 Now we're ready to select a task to make forward progress. Review the context:
 
- - Tracking issue(s): e.g. `bd show bd-1` with the appropriate prefix.
+ - Tracking issue(s): e.g. `bd show minibeads-1`
  - CLAUDE.md
  - PROJECT_VISION.md
 
@@ -16,6 +15,8 @@ validate` passes. Generally pick higher priority tasks first.
 If you become completely stuck, write the problem to "error.txt" before you exit.
 
 If you are successful, and `make validate` passes, then commit the
-changes. Finally, push the changes (`git push origin main`). If there
-are any upstream commits, pull those and merge them (fixing any merge
+changes. Finally, push the changes on the current branch and use github CLI (`gh runs`)
+to monitor the CI and look for problems.
+
+If there are any upstream commits, pull those and merge them (fixing any merge
 conflicts and revalidating) before pushing the merged results.
