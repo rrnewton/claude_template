@@ -22,3 +22,12 @@ ENV PATH="$PATH:/workspace/target/debug:/workspace/beads"
 # Still don't have volume mount ownership worked out.
 # USER ubuntu
 
+
+# Set the working directory to the custom WORKDIR
+# Create /workspace as a symlink to WORKDIR (for backward compatibility)
+# Only create symlink if WORKDIR is not /workspace
+ARG WORKDIR=/workspace
+RUN if [ "$WORKDIR" != "/workspace" ]; then \
+      ln -s ${WORKDIR} /workspace; \
+    fi
+WORKDIR ${WORKDIR}
