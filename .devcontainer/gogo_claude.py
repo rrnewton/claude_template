@@ -21,6 +21,58 @@ BUILTIN_PROMPTS = [
 ]
 
 
+def load_prompt_table(table_file: Path, script_dir: Path) -> List[Tuple[int, Path]]:
+    """Load prompt table from a text file.
+    
+    Format:
+        <NUMBER> <PROMPTFILE>
+        <NUMBER> <PROMPTFILE>
+        ...
+    
+    Where NUMBER is the weight and PROMPTFILE is the path to the prompt file.
+    Paths are resolved relative to the table file's directory.
+    """
+    prompts = []
+    table_dir = table_file.parent
+    
+    with open(table_file, 'r') as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+            
+            parts = line.split(None, 1)  # Split on first whitespace
+            if len(parts) != 2:
+                print(f"Warning: Skipping malformed line {line_num} in {table_file}: {line}", file=sys.stderr)
+                continue
+            
+            try:
+                weight = int(parts[0])
+                if weight <= 0:
+                    print(f"Warning: Skipping line {line_num} in {table_file}: weight must be positive", file=sys.stderr)
+                    continue
+            except ValueError:
+                print(f"Warning: Skipping line {line_num} in {table_file}: invalid weight '{parts[0]}'", file=sys.stderr)
+                continue
+            
+            # Resolve prompt file path (relative to table file or absolute)
+            prompt_path = Path(parts[1])
+            if not prompt_path.is_absolute():
+                prompt_path = table_dir / prompt_path
+            
+            if not prompt_path.exists():
+                print(f"Warning: Skipping line {line_num} in {table_file}: file not found '{prompt_path}'", file=sys.stderr)
+                continue
+            
+            prompts.append((weight, prompt_path))
+    
+    if not prompts:
+        raise ValueError(f"No valid prompts found in {table_file}")
+    
+    return prompts
+
+
 def select_weighted_prompt(prompts: List[Tuple[int, Path]]) -> Path:
     """Select a random prompt based on weights."""
     total_weight = sum(weight for weight, _ in prompts)
@@ -195,14 +247,22 @@ Custom prompts are used first, then randomly selects from built-in prompts:
   - task_gardening.md                (20%% probability)
 
 Examples:
-  %(prog)s 5                    # All 5 iterations randomly select from built-ins
-  %(prog)s 5 task1.md           # Iteration 1 uses task1.md, 2-5 random built-ins
-  %(prog)s 5 t1.md t2.md        # Iterations 1-2 use custom, 3-5 random built-ins
-  %(prog)s --happy 5            # Use happy wrapper with session title from .session_title.txt
-  %(prog)s --optimize 5         # All 5 iterations use optimization_task.md
-  %(prog)s --general 5          # All 5 iterations use generic_forward_progress_task.md
-  %(prog)s --tasks 5            # All 5 iterations use task_gardening.md
-  %(prog)s --only custom.md 5   # All 5 iterations use custom.md
+  %(prog)s 5                           # All 5 iterations randomly select from built-ins
+  %(prog)s 5 task1.md                  # Iteration 1 uses task1.md, 2-5 random built-ins
+  %(prog)s 5 t1.md t2.md               # Iterations 1-2 use custom, 3-5 random built-ins
+  %(prog)s --happy 5                   # Use happy wrapper with session title
+  %(prog)s --optimize 5                # All 5 iterations use optimization_task.md
+  %(prog)s --general 5                 # All 5 iterations use generic_forward_progress_task.md
+  %(prog)s --tasks 5                   # All 5 iterations use task_gardening.md
+  %(prog)s --only custom.md 5          # All 5 iterations use custom.md
+  %(prog)s --prompt-table table.txt 5  # Use weighted prompts from table.txt
+
+Prompt table format (for --prompt-table):
+  Each line: <WEIGHT> <PROMPTFILE>
+  Example table.txt:
+    10 prompts/generic_forward_progress_task.md
+    10 prompts/optimization_task.md
+  Weights are relative (10 10 = 50%% each, same as 1 1 or 100 100)
         """
     )
 
@@ -221,12 +281,16 @@ Examples:
                                    help='Use only task_gardening.md for all built-in prompts')
     prompt_type_group.add_argument('--only', type=str, metavar='PROMPT_FILE',
                                    help='Use specified prompt file for ALL iterations')
+    prompt_type_group.add_argument('--prompt-table', type=str, metavar='TABLE_FILE',
+                                   help='Load weighted prompt table from file (format: "<WEIGHT> <PROMPTFILE>" per line)')
 
     args = parser.parse_args()
 
-    # Validate --only is not used with positional prompts
+    # Validate --only and --prompt-table are not used with positional prompts
     if args.only and args.prompts:
         parser.error("--only cannot be used with positional prompt arguments")
+    if args.prompt_table and args.prompts:
+        parser.error("--prompt-table cannot be used with positional prompt arguments")
 
     # Setup paths
     script_dir = Path(__file__).parent
@@ -243,7 +307,25 @@ Examples:
     ]
 
     # Determine which prompt to use for built-in selections
-    if args.only:
+    if args.prompt_table:
+        # Load prompts from table file
+        table_path = Path(args.prompt_table)
+        if not table_path.exists():
+            parser.error(f"Prompt table file not found: {args.prompt_table}")
+        try:
+            builtin_prompts = load_prompt_table(table_path, script_dir)
+            prompt_mode = f"weighted table ({table_path.name})"
+            print(f"Loaded {len(builtin_prompts)} prompts from {table_path}")
+            total_weight = sum(w for w, _ in builtin_prompts)
+            for weight, path in builtin_prompts:
+                probability = (weight / total_weight) * 100
+                print(f"  {weight:3d} ({probability:5.1f}%) {path.name}")
+            print()
+        except Exception as e:
+            parser.error(f"Failed to load prompt table: {e}")
+        fixed_prompt = None
+        use_only_mode = False
+    elif args.only:
         only_prompt_path = Path(args.only)
         if not only_prompt_path.exists():
             parser.error(f"Prompt file not found: {args.only}")

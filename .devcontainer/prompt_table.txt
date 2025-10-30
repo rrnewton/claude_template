@@ -1,0 +1,8 @@
+# Prompt table with equal weights for all prompts
+# Each prompt has weight 1, giving equal probability to all
+
+30   prompts/generic_forward_progress_task.md
+20   prompts/expand_MTG_compatibility.md
+20   prompts/heuristic_ai_progress.md
+20   prompts/optimization_task.md
+10   prompts/specific_task_postscript.md
