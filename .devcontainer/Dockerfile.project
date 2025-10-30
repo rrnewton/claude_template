@@ -36,7 +36,7 @@ RUN cargo install --git https://github.com/rrnewton/minibeads --tag v0.1
 ENV IS_SANDBOX=1
 # USER $MYUSER
 ENV PATH="$PATH:$HOME/bin"
-ENV PATH="$PATH:$HOME/.cargo/bin"
+ENV PATH="$PATH:/opt/cargo/bin"
 
 # ADD --chown=node:node dot-claude-init /home/node/.claude/
 # Share the config directory from the host:
