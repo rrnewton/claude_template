@@ -4,6 +4,7 @@ USER=ubuntu
 CACHEBUST=0
 
 TAG := $(shell cat project_name.txt)
+FULLTAG := $(TAG)-$(SLOT)
 
 ifeq ($(strip $(TAG)),)
     $(error TAG must be set (from project_name.txt) and not empty!)
@@ -19,21 +20,26 @@ else
     CONTAINER= echo Unsupported_OS && exit 1
 endif
 
+GOCLAUDE= claude --dangerously-skip-permissions --continue
+
+# Always invoke claude from the same space so we don't confuse our claude.json workspace config.
+CLAUDEWORK= /workspace
+
 # `make CACHEBUST="$(date +%s)" build` to force rebuild.
 build: Dockerfile
-	$(CONTAINER) build -t $(TAG)-$(SLOT) --build-arg CACHEBUST=$(CACHEBUST) .
+	$(CONTAINER) build -t $(FULLTAG) --build-arg CACHEBUST=$(CACHEBUST) .
 
 run:
 	$(CONTAINER) run -it --rm -u $(USER) \
 		-v `pwd`/home:/home/$(USER) \
 		-v `pwd`/..:/workspace \
-		$(TAG)-$(SLOT) bash
+		$(FULLTAG) bash
 
 root:
 	$(CONTAINER) run -it --rm -u root \
 		-v `pwd`/home:/root \
 		-v `pwd`/..:/workspace \
-		$(TAG)-$(SLOT) bash
+		$(FULLTAG) bash
 
 Dockerfile: Dockerfile.prefix Dockerfile.project
 	cat Dockerfile.prefix Dockerfile.project > Dockerfile
@@ -43,13 +49,17 @@ Dockerfile: Dockerfile.prefix Dockerfile.project
 .session_title.txt:
 	echo $(TAG)-`hostname` > $@
 
+claude:
+	cd "$(CLAUDEWORK)" && $(GOCLAUDE)
+
 # Use my tweaked version of happy if it's available
 happy: .session_title.txt
 	TITLE=`cat $^` && cd .. && \
 	hits=$$(happy -h | grep '\-\-uname'); \
+	cd "$(CLAUDEWORK)" && \
 	if [ -z "$$hits" ]; then \
-	  happy --name "$$TITLE" claude --dangerously-skip-permissions; else \
-	  happy claude --dangerously-skip-permissions "Tell happy to change the title to $$TITLE"; \
+	  happy --name "$$TITLE" $(GOCLAUDE); else \
+	  happy $(GOCLAUDE) "Tell happy to change the title to $$TITLE"; \
 	fi
 
 # Usually from outside the container, to pass it in:
@@ -72,12 +82,15 @@ home/.ssh/id_rsa.pub:
 
 # From inside the container:
 claude-github:
-	claude mcp add --transport http github https://api.githubcopilot.com/mcp -H "Authorization: Bearer $GITHUB_PERSONAL_ACCESS_TOKEN"
+	cd "$(CLAUDEWORK)" && \
+	claude mcp remove github || \
+	claude mcp add --transport http github https://api.githubcopilot.com/mcp \
+          -H "Authorization: Bearer $(GITHUB_PERSONAL_ACCESS_TOKEN)"
 
 # From inside the container:
 claude-beads:
-	claude plugin marketplace add steveyegge/beads
-	claude plugin install beads
+	cd "$(CLAUDEWORK)" && claude plugin marketplace add steveyegge/beads
+	cd "$(CLAUDEWORK)" && claude plugin install beads
 
 outside-setup: install-pat
 
@@ -93,8 +106,8 @@ pull-main:
 	git checkout $$BRANCH && \
 	git merge main
 
-move-to-main:
-	git stash && git checkout main && git stash pop
+commit-to-main:
+	./commit_to_main.sh
 
 .PHONY: claude-beads claude-github setup-claude happy run build root pull-main \
    inside-setup outside-setup install-pat install-ssh-deploy-key
