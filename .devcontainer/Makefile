@@ -113,7 +113,7 @@ commit-to-main:
 # running to drive Claude.
 #
 # Copy .devcontainer to $HOME if we're under /workspace, then switch to it
-side-step:
+rsync:
 	@if echo "$(PWD)" | grep -q "^/workspace"; then \
 		echo "Detected /workspace directory, copying to $$HOME/devcontainer_clone..."; \
 		mkdir -p "$$HOME/devcontainer_clone"; \
@@ -125,5 +125,30 @@ side-step:
 		echo "Current directory: $(PWD)"; \
 	fi
 
+# Bidirectional sync using unison
+sync:
+	@if echo "$(PWD)" | grep -q "^/workspace"; then \
+		echo "Detected /workspace directory, syncing with $$HOME/devcontainer_clone..."; \
+		mkdir -p "$$HOME/devcontainer_clone"; \
+		unison "$(PWD)" "$$HOME/devcontainer_clone" \
+			-ignore 'Path home' \
+			-auto -batch -prefer "$(PWD)"; \
+		echo "Switching to $$HOME/devcontainer_clone"; \
+		cd "$$HOME/devcontainer_clone" && exec bash; \
+	else \
+		echo "Not under /workspace directory, no action taken."; \
+		echo "Current directory: $(PWD)"; \
+	fi
+
+# Smart side-step: use unison if available, otherwise rsync
+side-step:
+	@if command -v unison >/dev/null 2>&1; then \
+		echo "Using unison for bidirectional sync..."; \
+		$(MAKE) sync; \
+	else \
+		echo "Unison not found, falling back to rsync..."; \
+		$(MAKE) rsync; \
+	fi
+
 .PHONY: claude-beads claude-github setup-claude happy run build root pull-main \
-   inside-setup outside-setup install-pat install-ssh-deploy-key side-step
+   inside-setup outside-setup install-pat install-ssh-deploy-key side-step rsync sync
