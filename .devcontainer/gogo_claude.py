@@ -70,8 +70,6 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
     """Run a single iteration with claude."""
     print(f"\n=== Iteration {iteration} of {total} ===")
 
-    os.chdir("/workspace")
-
     # Find unused log filename
     log_num = find_next_log_number(logs_dir)
     log_file = logs_dir / f"claude_workstream{log_num:02d}.jsonl"
@@ -133,6 +131,9 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
 
     # Run claude command with tee-like behavior
     try:
+        # Change to /workspace for the claude subprocess
+        os.chdir("/workspace")
+
         with open(log_file, 'a') as log:
             process = subprocess.Popen(
                 cmd,
