@@ -61,9 +61,6 @@ happy: .session_title.txt
 	  happy $(GOCLAUDE) "Tell happy to change the title to $$TITLE"; \
 	fi
 
-claude:
-	claude --dangerously-skip-permissions
-
 # Usually from outside the container, to pass it in:
 install-pat: home/.github/PAT.txt
 home/.github/PAT.txt:

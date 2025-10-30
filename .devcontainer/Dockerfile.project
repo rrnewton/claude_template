@@ -1,3 +1,20 @@
+USER root
+
+# psmisc has killall:
+RUN apt-get install -y psmisc
 
 USER root
-RUN apt-get install -y golang
+RUN apt-get install -y golang && mkdir -p /opt/local/bin 
+ENV GOBIN="/opt/local/bin"
+
+# Keep it out of the home dir because we will mount that from host:
+RUN apt-get install rustup
+ENV CARGO_HOME=/opt/cargo
+ENV RUSTUP_HOME=/opt/multirust
+RUN mkdir -p "$CARGO_HOME" && rustup toolchain install stable
+
+# Still don't have volume mount ownership worked out.
+# USER ubuntu
+
+# RUN apt-get install -y heaptrack
+# RUN cargo install cargo-heaptrack cargo-nextest
