@@ -109,5 +109,21 @@ pull-main:
 commit-to-main:
 	./commit_to_main.sh
 
+# Get out of the way so work in this repo doesn't mess with the scripts we're
+# running to drive Claude.
+#
+# Copy .devcontainer to $HOME if we're under /workspace, then switch to it
+side-step:
+	@if echo "$(PWD)" | grep -q "^/workspace"; then \
+		echo "Detected /workspace directory, copying to $$HOME/devcontainer_clone..."; \
+		mkdir -p "$$HOME/devcontainer_clone"; \
+		rsync -av --no-owner --no-group --exclude='home/' "$(PWD)/" "$$HOME/devcontainer_clone/"; \
+		echo "Switching to $$HOME/devcontainer_clone"; \
+		cd "$$HOME/devcontainer_clone" && exec bash; \
+	else \
+		echo "Not under /workspace directory, no action taken."; \
+		echo "Current directory: $(PWD)"; \
+	fi
+
 .PHONY: claude-beads claude-github setup-claude happy run build root pull-main \
-   inside-setup outside-setup install-pat install-ssh-deploy-key
+   inside-setup outside-setup install-pat install-ssh-deploy-key side-step
