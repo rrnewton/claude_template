@@ -1,6 +1,6 @@
-Your goal right now is to identify and fix a missing feature in MTG compatibility from considering the `forge-java` reference implementation or the MTG rules. MTG is a huge game with a lot of mechanics to cover. To find something broken to fix:
+Your goal right now is to identify and fix a missing feature in MTG compatibility from considering the `/workspace/forge-java` reference implementation or the MTG rules. MTG is a huge game with a lot of mechanics to cover. To find something broken to fix:
 
-- Pick a random `.dck` file in `decks/old_school` or `forge-java`
+- Pick a random `.dck` file in `/workspace/decks/old_school` or `/workspcae/forge-java`
 - Attempt to play it with the `mtg tui`
 - Look for errors, problems, or illegal behavior by MTG rules.
 - Fix the problem, expanding our game engine to cover more of MTG.
