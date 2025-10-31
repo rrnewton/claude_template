@@ -12,6 +12,7 @@ RUN apt-get install rustup
 ENV CARGO_HOME=/opt/cargo
 ENV RUSTUP_HOME=/opt/multirust
 RUN mkdir -p "$CARGO_HOME" && rustup toolchain install stable
+ENV PATH="$PATH:/opt/cargo/bin"
 
 RUN cargo install cargo-nextest
 # RUN apt-get install -y heaptrack
