@@ -4,12 +4,6 @@
 USER root
 RUN apt-get update && apt-get install -y maven openjdk-21-jdk-headless
 
-# Keep it out of the home dir because we will mount that from host:
-RUN apt-get install rustup
-ENV CARGO_HOME=/opt/cargo
-ENV RUSTUP_HOME=/opt/multirust
-RUN mkdir -p "$CARGO_HOME" && rustup toolchain install stable
-
 RUN apt-get install -y heaptrack
 RUN cargo install cargo-heaptrack cargo-nextest
 
@@ -20,8 +14,6 @@ RUN apt-get install -y gnuplot psmisc
 
 # To force rebuild from here, pass --build-arg CACHEBUST=$(date +%s), 
 ARG CACHEBUST
-
-RUN cargo install --git https://github.com/rrnewton/minibeads --tag v0.1
 
 # RUN mkdir -p /opt/local/bin && \
 #     export GOBIN="/opt/local/bin" && \
