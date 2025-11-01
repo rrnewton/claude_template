@@ -4,13 +4,8 @@
 USER root
 RUN apt-get update && apt-get install -y maven openjdk-21-jdk-headless
 
-RUN apt-get install -y heaptrack
-RUN cargo install cargo-heaptrack cargo-nextest
-
 # Keep it out of the home dir because we will mount that from host:
-RUN apt-get install -y golang
-# psmisc has killall:
-RUN apt-get install -y gnuplot psmisc
+# RUN apt-get install -y golang
 
 # To force rebuild from here, pass --build-arg CACHEBUST=$(date +%s), 
 ARG CACHEBUST
