@@ -1,3 +1,48 @@
 
 USER root
 RUN apt-get install -y golang
+
+# RUN curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install > /etc/nix_install.sh && chmod +x /etc/nix_install.sh
+# RUN /etc/nix_install.sh --daemon
+
+
+
+# ARG NIX_VERSION=2.3.14
+# ARG NIX_VERSION=2.32.2
+# RUN wget https://nixos.org/releases/nix/nix-${NIX_VERSION}/nix-${NIX_VERSION}-$(uname -m)-linux.tar.xz \
+#   && tar xf nix-${NIX_VERSION}-$(uname -m)-linux.tar.xz \
+#   && addgroup --system --gid 30000 nixbld \
+#   && for i in $(seq 1 30); do adduser --system --disabled-password --home /var/empty --comment "Nix build user $i" --uid $((800 + i)) --ingroup nixbld nixbld$i ; done \
+#   && mkdir -m 0755 /etc/nix \
+#   && echo 'sandbox = false' > /etc/nix/nix.conf \
+#   && mkdir -m 0755 /nix && USER=root sh nix-${NIX_VERSION}-$(uname -m)-linux/install \
+#   && ln -s /nix/var/nix/profiles/default/etc/profile.d/nix.sh /etc/profile.d/ \
+#   && rm -r /nix-${NIX_VERSION}-$(uname -m)-linux* \
+#   && rm -rf /var/cache/apk/* \
+#   && /nix/var/nix/profiles/default/bin/nix-collect-garbage --delete-old \
+#   && /nix/var/nix/profiles/default/bin/nix-store --optimise \
+#   && /nix/var/nix/profiles/default/bin/nix-store --verify --check-contents
+
+
+# ARG GID=1000
+# Create a non-root user (recommended for security)
+#RUN # groupadd --gid $GID $MYUSER && \
+    # useradd -m -u $UID --ingroup $GID -s /bin/bash $MYUSER && \
+#    echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+RUN mkdir -m 0755 /nix && chown $MYUSER /nix
+
+# Switch to the non-root user
+USER $MYUSER
+
+# Install Nix (single-user installation without daemon)
+# The --no-daemon flag is crucial for Docker environments without systemd
+RUN sh -c "$(curl -L https://nixos.org/nix/install)" -- --no-daemon
+
+# Add Nix to the user's PATH (important for using Nix commands)
+ENV PATH="/home/$USERNAME/.nix-profile/bin:$PATH"
+
+# (Optional) Enable experimental features like flakes
+# This requires creating the directory and adding the configuration
+RUN mkdir -p /home/$USERNAME/.config/nix && \
+    echo "experimental-features = nix-command flakes" >> /home/$USERNAME/.config/nix/nix.conf
