@@ -1,5 +1,6 @@
 
 We're going to work on an OPTIMIZATION task.
+Review any outstanding issues about optimization and allocation rates.
 
 But before we do let's make sure we start in a clean state, as
 described in CLAUDE.md.

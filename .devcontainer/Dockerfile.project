@@ -7,6 +7,9 @@ RUN apt-get update && apt-get install -y maven openjdk-21-jdk-headless
 # For git push and pull:
 RUN apt-get install -y ssh
 
+# For plotting
+RUN pip install pandas matplotlib
+
 # Keep it out of the home dir because we will mount that from host:
 # RUN apt-get install -y golang
 

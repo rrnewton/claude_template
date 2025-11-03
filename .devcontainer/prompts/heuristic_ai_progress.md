@@ -1,5 +1,6 @@
 
 Work on expanding the heuristic AI towards parity with the Java version.
+Review issues and tracking issues related to this (e.g. mtg-77).
 
 The testing strategy will be similar to test_royal_assassin_with_log_capture (or the shell script e2e tests/*.sh), we need to set up specific scenarios and verify the actions. Continue to use a greater variety of cards up to 4ED with more triggered and keyword abilities. Activate until we are running tests with real board states with the real cards loaded from the card database.
 
