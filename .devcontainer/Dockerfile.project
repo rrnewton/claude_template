@@ -10,6 +10,11 @@ RUN apt-get install -y ssh
 # For plotting
 RUN pip install pandas matplotlib
 
+# For performance profiling and monitoring:
+# Install perf (linux-tools) for system performance analysis
+# Note: perf functionality may be limited in WSL2/containers due to kernel restrictions
+RUN apt-get install -y linux-tools-common linux-tools-generic
+
 # Keep it out of the home dir because we will mount that from host:
 # RUN apt-get install -y golang
 
