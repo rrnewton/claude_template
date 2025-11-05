@@ -88,6 +88,14 @@ root:
 		-v `pwd`/..:$(WORKDIR) \
 		$(FULLTAG) bash
 
+privileged:
+	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+		-v `pwd`/home:/root \
+		-v `pwd`/..:$(WORKDIR) \
+		--privileged --cap-add=ALL \
+		$(FULLTAG) bash
+
+
 AGENT_LAYERS = Dockerfile.claude Dockerfile.copilot
 # Dockerfile.gemini
 
