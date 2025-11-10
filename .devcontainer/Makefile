@@ -45,7 +45,14 @@ root: .image_copied
 
 
 # Overkill version. Works, but can kill every process on the system:
-#  -pid=host --cgroupns=host -v /sys:/sys:rw --privileged --cap-add=ALL \
+overkill: .image_copied
+	sudo $(CONTAINER) run -it --rm -u root \
+		-v `pwd`/home:/root \
+		-v `pwd`/..:/workspace \
+		--cap-add=SYS_ADMIN --cap-add=SYS_NICE \
+		-pid=host --cgroupns=host -v /sys:/sys:rw --privileged --cap-add=ALL \
+	   	--cgroup-manager=cgroupfs \
+		$(FULLTAG) bash
 
 # try1, minimal, not working:
 # --volume /sys/kernel/debug:/sys/kernel/debug:rw \
