@@ -104,11 +104,11 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 
 # Copy and set up firewall script
-COPY init-firewall.sh /usr/local/bin/
+# COPY init-firewall.sh a/usr/local/bin/
 USER root
-RUN chmod +x /usr/local/bin/init-firewall.sh && \
-  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
-  chmod 0440 /etc/sudoers.d/node-firewall
+# RUN chmod +x /usr/local/bin/init-firewall.sh && \
+#  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
+#  chmod 0440 /etc/sudoers.d/node-firewall
 ENV IS_SANDBOX=1
 # End claude-related dependencies and setup.
 

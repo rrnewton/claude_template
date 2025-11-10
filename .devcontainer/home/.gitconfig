@@ -22,3 +22,5 @@
 # 	default = matching # historical default
 [pull]
 	rebase = true
+[safe]
+	directory = /workspace

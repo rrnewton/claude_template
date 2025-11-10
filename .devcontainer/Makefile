@@ -50,7 +50,7 @@ overkill: .image_copied
 		-v `pwd`/home:/root \
 		-v `pwd`/..:/workspace \
 		--cap-add=SYS_ADMIN --cap-add=SYS_NICE \
-		-pid=host --cgroupns=host -v /sys:/sys:rw --privileged --cap-add=ALL \
+		--pid=host --cgroupns=host -v /sys:/sys:rw --privileged --cap-add=ALL \
 	   	--cgroup-manager=cgroupfs \
 		$(FULLTAG) bash
 
@@ -69,11 +69,12 @@ Dockerfile: Dockerfile.prefix Dockerfile.project
 # Use my tweaked version of happy if it's available
 happy: .session_title.txt
 	TITLE=`cat $^` && cd .. && \
-	hits=$$(happy -h | grep '\-\-uname'); \
-	if [ -z "$$hits" ]; then \
-	  happy --name "$$TITLE" claude --dangerously-skip-permissions; else \
-	  happy claude --dangerously-skip-permissions "Tell happy to change the title to $$TITLE"; \
-	fi
+	happy claude  "Tell happy to change the title to $$TITLE";
+#	hits=$$(happy -h | grep '\-\-uname'); \
+#	if [ -z "$$hits" ]; then \
+#	  happy --name "$$TITLE" claude --dangerously-skip-permissions; else \
+#	  happy claude --dangerously-skip-permissions "Tell happy to change the title to $$TITLE"; \
+#	fi
 
 # Usually from outside the container, to pass it in:
 install-pat: home/.github/PAT.txt

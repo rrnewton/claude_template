@@ -8,4 +8,4 @@ ENV RUSTUP_HOME=/opt/multirust
 RUN mkdir -p "$CARGO_HOME" && rustup toolchain install stable
 
 RUN cargo install cargo-heaptrack cargo-nextest
-RUN apt-get install -y heaptrack ncdu
+RUN apt-get install -y heaptrack ncdu inetutils-ping
