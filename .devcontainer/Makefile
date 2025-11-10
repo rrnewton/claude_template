@@ -3,6 +3,7 @@ SLOT=$(shell cat slot.txt)
 USER=ubuntu
 
 TAG := $(shell cat project_name.txt)
+FULLTAG := $(TAG)-$(SLOT)
 
 ifeq ($(strip $(TAG)),)
     $(error TAG must be set (from project_name.txt) and not empty!)
@@ -18,20 +19,37 @@ else
     CONTAINER= echo Unsupported_OS && exit 1
 endif
 
-build: Dockerfile
-	$(CONTAINER) build -t $(TAG)-$(SLOT) .
+build:: Dockerfile
+	$(CONTAINER) build -t $(FULLTAG) .
+	touch .image_dirty
 
 run:
 	$(CONTAINER) run -it --rm -u $(USER) \
 		-v `pwd`/home:/home/$(USER) \
 		-v `pwd`/..:/workspace \
-		$(TAG)-$(SLOT) bash
+		$(FULLTAG) bash
 
-root:
-	$(CONTAINER) run -it --rm -u root \
+# .image_dirty: build
+.image_copied: .image_dirty
+	$(CONTAINER) image scp $(FULLTAG):latest root@localhost::
+	touch .image_copied
+
+root: .image_copied
+	sudo $(CONTAINER) run -it --rm -u root \
 		-v `pwd`/home:/root \
 		-v `pwd`/..:/workspace \
-		$(TAG)-$(SLOT) bash
+		--cap-add=SYS_ADMIN --cap-add=SYS_NICE \
+		-v /sys/kernel/sched_ext:/sys/kernel/sched_ext:ro \
+	   	--cgroup-manager=cgroupfs \
+		$(FULLTAG) bash
+
+
+# Overkill version. Works, but can kill every process on the system:
+#  -pid=host --cgroupns=host -v /sys:/sys:rw --privileged --cap-add=ALL \
+
+# try1, minimal, not working:
+# --volume /sys/kernel/debug:/sys/kernel/debug:rw \
+
 
 Dockerfile: Dockerfile.prefix Dockerfile.project
 	cat Dockerfile.prefix Dockerfile.project > Dockerfile
@@ -95,4 +113,4 @@ move-to-main:
 	git stash && git checkout main && git stash pop
 
 .PHONY: claude-beads claude-github setup-claude happy run build root pull-main \
-   inside-setup outside-setup install-pat install-ssh-deploy-key
+   inside-setup outside-setup install-pat install-ssh-deploy-key 

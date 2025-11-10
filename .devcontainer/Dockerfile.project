@@ -1,1 +1,11 @@
 
+USER root
+
+# Keep it out of the home dir because we will mount that from host:
+RUN apt-get install rustup
+ENV CARGO_HOME=/opt/cargo
+ENV RUSTUP_HOME=/opt/multirust
+RUN mkdir -p "$CARGO_HOME" && rustup toolchain install stable
+
+RUN cargo install cargo-heaptrack cargo-nextest
+RUN apt-get install -y heaptrack ncdu
