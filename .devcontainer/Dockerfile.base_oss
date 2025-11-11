@@ -1,0 +1,3 @@
+# [RRN] node image has too old versions for certain packages we use:
+# FROM node:25
+FROM ubuntu:25.10

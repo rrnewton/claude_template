@@ -1,0 +1,4 @@
+FROM vmvm-registry.fbinfra.net/ubuntu:25.10
+
+# Important Line: Allow APT to run as root
+RUN echo 'APT::Sandbox::User "root";' | tee -a /etc/apt/apt.conf.d/10sandbox
