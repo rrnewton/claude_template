@@ -112,6 +112,8 @@ overkill: .image_copied
 # try1, minimal, not working:
 # --volume /sys/kernel/debug:/sys/kernel/debug:rw \
 
+# DOCKERBASE = Dockerfile.base_oss
+DOCKERBASE = Dockerfile.base_meta
 
 AGENT_LAYERS = Dockerfile.claude Dockerfile.copilot
 # Dockerfile.gemini
@@ -119,7 +121,7 @@ AGENT_LAYERS = Dockerfile.claude Dockerfile.copilot
 # Remove Dockerfile.rust if we are not using rust or minibeads:
 OPTIONAL_DOCKER_LAYERS = Dockerfile.rust
 Dockerfile: Dockerfile.*
-	cat Dockerfile.prefix $(AGENT_LAYERS) $(OPTIONAL_DOCKER_LAYERS) Dockerfile.project Dockerfile.postfix > Dockerfile
+	cat $(DOCKERBASE) Dockerfile.prefix $(AGENT_LAYERS) $(OPTIONAL_DOCKER_LAYERS) Dockerfile.project Dockerfile.postfix > Dockerfile
 
 # TODO: need a way to pass this into happy on the CLI.
 # It can take an MCP action to change it, but that's lame and wasteful.
