@@ -7,17 +7,12 @@ FROM ubuntu:25.10
 # ARG TZ
 # ENV TZ="$TZ"
 
-ARG CLAUDE_CODE_VERSION=latest
-
-# Installs a TON of stufF:
-RUN apt-get update && apt-get install -y npm
-
 # Stolen from the nodejs/docker/node Dockerfile:
 # RUN groupadd --gid 1000 node \
 #   && useradd --uid 1000 --gid node --shell /bin/bash --create-home node
 
 # Install basic development tools and iptables/ipset
-RUN apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
   less \
   git \
   procps \
@@ -42,6 +37,27 @@ RUN apt-get install -y --no-install-recommends \
   # installs either:
   # && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Installs a TON of stufF:
+# RUN apt-get install -y npm
+
+# Going to a newer version for github copilot
+RUN apt-get install -y ca-certificates && \
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+
+ARG NODE_VERSION=24
+
+RUN . "$HOME/.nvm/nvm.sh" && nvm install ${NODE_VERSION} && \
+    nvm alias default ${NODE_VERSION} && nvm use default && \
+    which node && node -v && npm -v 
+
+# Hack to discover the minor version: e.g. /bin/versions/node/v24.11.0/bin/node
+RUN cd /bin/versions/node/ && ln -s v24* 24
+ENV PATH=$PATH:/bin/versions/node/24/bin/
+
+# Install global packages
+# ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
+# ENV PATH=$PATH:/usr/local/share/npm-global/bin
+
 # [RRN] Differ in the non-root user we use from the node image:
 # ENV MYUSER=node
 ENV MYUSER=ubuntu
@@ -62,25 +78,6 @@ ARG USERNAME=$MYUSER
 # Set `DEVCONTAINER` environment variable to help with orientation
 ENV DEVCONTAINER=true
 
-# Create workspace and config directories and set permissions
-RUN mkdir -p /workspace /home/$MYUSER/.claude && \
-  chown -R $MYUSER:$MYUSER /workspace /home/$MYUSER/.claude
-
-WORKDIR /workspace
-
-ARG GIT_DELTA_VERSION=0.18.2
-RUN ARCH=$(dpkg --print-architecture) && \
-  wget "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
-  sudo dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
-  rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
-
-# Set up non-root user
-USER $MYUSER
-
-# Install global packages
-ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
-ENV PATH=$PATH:/usr/local/share/npm-global/bin
-
 # [RRN] Uh, I don't know why claude needs to be opinionated about shell..
 # Set the default shell to zsh rather than sh
 # ENV SHELL=/bin/zsh
@@ -99,32 +96,31 @@ ENV VISUAL=nano
 #   -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
 #   -x
 
-# Install Claude
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
-
-
-# Copy and set up firewall script
-# COPY init-firewall.sh a/usr/local/bin/
-USER root
-# RUN chmod +x /usr/local/bin/init-firewall.sh && \
-#  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
-#  chmod 0440 /etc/sudoers.d/node-firewall
-ENV IS_SANDBOX=1
-# End claude-related dependencies and setup.
 
 # [RRN] basic additiions I like everywhere.
-RUN apt-get install -y time parallel hyperfine bc
+# psmisc has killall:
+RUN apt-get install -y time parallel hyperfine bc emacs gnuplot psmisc ssh
+
 # [RRN] Python is so universal for scripting...
 RUN apt-get install -y python3 pip python3-venv
 RUN python3 -m venv /opt/venv
 RUN /opt/venv/bin/python3 -m pip install uv
 # End shared, non-project configuration.
 
-# RUN npm install -g happy-coder
 # [RRN] Run my version, but cannot do it in a one-liner because of build step:
-RUN git clone --depth=1 https://github.com/rrnewton/happy-cli.git /tmp/happy && \
-      cd /tmp/happy && npm install && npm run build && npm install -g . && \
-      rm -rf /tmp/happy
+RUN . "$HOME/.nvm/nvm.sh" && \
+    npm install -g happy-coder
+# Shelving my version for now which just added --set-title.
+    # git clone --depth=1 https://github.com/rrnewton/happy-cli.git /tmp/happy && \
+    #   cd /tmp/happy && npm install && npm run build && npm install -g . && \
+    #   rm -rf /tmp/happy
 
-USER $MYUSER
+
+# Create workspace and config directories and set permissions
+#RUN mkdir -p /workspace /home/$MYUSER/.claude && \
+#  chown -R $MYUSER:$MYUSER /workspace /home/$MYUSER/.claude
+
+# WORKDIR /workspace
+
+# USER $MYUSER
 ENV SHELL=/bin/bash
