@@ -74,7 +74,8 @@ GOCLAUDE= claude --dangerously-skip-permissions --continue
 CLAUDEWORK= $(WORKDIR)
 
 # `make CACHEBUST="$(date +%s)" build` to force rebuild.
-build: Dockerfile
+build: .image_dirty
+.image_dirty: Dockerfile
 	$(CONTAINER) build -t $(FULLTAG) --build-arg CACHEBUST=$(CACHEBUST) --build-arg WORKDIR=$(WORKDIR) .
 	touch .image_dirty
 
@@ -84,7 +85,6 @@ run:
 		-v `pwd`/..:$(WORKDIR) \
 		$(FULLTAG) bash
 
-# .image_dirty: build
 .image_copied: .image_dirty
 	$(CONTAINER) image scp $(FULLTAG):latest root@localhost::
 	touch .image_copied
