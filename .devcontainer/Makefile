@@ -105,7 +105,7 @@ overkill: .image_copied
 		-v `pwd`/home:/root \
 		-v `pwd`/..:$(WORKDIR) \
 		--cap-add=SYS_ADMIN --cap-add=SYS_NICE \
-		--pid=host --cgroupns=host -v /sys:/sys:rw --privileged --cap-add=ALL \
+		--pid=host --cgroupns=host --network=host -v /sys:/sys:rw --privileged --cap-add=ALL \
 	   	--cgroup-manager=cgroupfs \
 		$(FULLTAG) bash
 
