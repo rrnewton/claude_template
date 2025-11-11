@@ -11,6 +11,9 @@ RUN cargo install cargo-heaptrack cargo-nextest
 RUN apt-get install -y heaptrack ncdu inetutils-ping stress-ng
 
 RUN apt-get install -y linux-tools-common linux-tools-generic python3-pandas python3-matplotlib
-RUN /opt/venv/bin/python3 -m pip install yaml
 
+# Let the makefile install python deps with pip...
+# RUN /opt/venv/bin/python3 -m pip install yaml
+
+# rt-app needs
 # dnf install -y autoreconf libtool.x86_64 aclocal json-c-devel.x86_64 json-c.x86_64
