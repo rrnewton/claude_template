@@ -25,3 +25,5 @@
 [safe]
 	directory = /workspace
 	directory = /workspace/schtest
+	directory = /workspace/schtest2
+	directory = /workspace/schtest3

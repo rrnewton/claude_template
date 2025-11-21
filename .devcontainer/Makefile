@@ -67,7 +67,8 @@ else
     CONTAINER= echo Unsupported_OS && exit 1
 endif
 
-GOCLAUDE= claude --dangerously-skip-permissions --continue
+CONTIUE= --continue
+GOCLAUDE= claude --dangerously-skip-permissions $(CONTINUE)
 
 # Always invoke claude from the same space so we don't confuse our claude.json workspace config.
 # Now uses the dynamically computed WORKDIR instead of hardcoded /workspace
@@ -112,8 +113,8 @@ overkill: .image_copied
 # try1, minimal, not working:
 # --volume /sys/kernel/debug:/sys/kernel/debug:rw \
 
-# DOCKERBASE = Dockerfile.base_oss
-DOCKERBASE = Dockerfile.base_meta
+DOCKERBASE = Dockerfile.base_oss
+# DOCKERBASE = Dockerfile.base_meta
 
 AGENT_LAYERS = Dockerfile.claude Dockerfile.copilot
 # Dockerfile.gemini
