@@ -1,8 +1,7 @@
 # [RRN] Run my version, but cannot do it in a one-liner because of build step:
 
-RUN git clone --depth=1 https://github.com/rrnewton/happy-cli.git /tmp/happy && \
-      cd /tmp/happy && npm install && npm run build && npm install -g . && \
-      rm -rf /tmp/happy
+RUN git clone --depth=1 https://github.com/rrnewton/happy-cli.git /usr/happy && \
+      cd /usr/happy && npm install && npm run build && npm install -g .
 
 ENV HAPPY_HOME_DIR="$HOME/.happy"
 ENV HAPPY_SERVER_URL="http://ffh.duckdns.org:3005"
