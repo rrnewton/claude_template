@@ -1,0 +1,2 @@
+
+RUN . "$HOME/.nvm/nvm.sh" && npm install -g happy-coder

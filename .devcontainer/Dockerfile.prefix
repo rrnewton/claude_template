@@ -107,15 +107,6 @@ RUN python3 -m venv /opt/venv
 RUN /opt/venv/bin/python3 -m pip install uv
 # End shared, non-project configuration.
 
-# [RRN] Run my version, but cannot do it in a one-liner because of build step:
-RUN . "$HOME/.nvm/nvm.sh" && \
-    npm install -g happy-coder
-# Shelving my version for now which just added --set-title.
-    # git clone --depth=1 https://github.com/rrnewton/happy-cli.git /tmp/happy && \
-    #   cd /tmp/happy && npm install && npm run build && npm install -g . && \
-    #   rm -rf /tmp/happy
-
-
 # Create workspace and config directories and set permissions
 #RUN mkdir -p /workspace /home/$MYUSER/.claude && \
 #  chown -R $MYUSER:$MYUSER /workspace /home/$MYUSER/.claude
