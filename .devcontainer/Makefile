@@ -99,8 +99,8 @@ privileged:
 AGENT_LAYERS = Dockerfile.claude Dockerfile.copilot
 # Dockerfile.gemini
 
-HAPPY_LAYER = Dockerfile.happy-upstream
-#  HAPPY_LAYER = Dockerfile.happy-fork
+# HAPPY_LAYER = Dockerfile.happy-upstream
+HAPPY_LAYER = Dockerfile.happy-fork
 
 # Remove Dockerfile.rust if we are not using rust or minibeads:
 OPTIONAL_DOCKER_LAYERS = Dockerfile.rust
