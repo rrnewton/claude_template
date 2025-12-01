@@ -96,28 +96,6 @@ def find_next_log_number(logs_dir: Path) -> int:
     return num
 
 
-def get_session_title(script_dir: Path) -> str:
-    """Read session title from .session_title.txt"""
-    title_file = script_dir / '.session_title.txt'
-    if title_file.exists():
-        return title_file.read_text().strip()
-    return ""
-
-
-def check_happy_version() -> bool:
-    """Check if happy supports --name flag."""
-    try:
-        result = subprocess.run(
-            ['happy', '-h'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        return '--name' in result.stdout or '--uname' in result.stdout
-    except Exception:
-        return False
-
-
 def get_working_directory() -> Path:
     """Get the working directory for running claude.
 
@@ -231,32 +209,15 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
     # Build claude command
     if use_happy:
         # Use happy wrapper
-        session_title = get_session_title(script_dir)
-
-        # Check if happy supports --name flag
-        if check_happy_version():
-            # Newer version with --name support
-            cmd = [
-                'happy',
-                '--name', session_title,
-                'claude',
-                '--dangerously-skip-permissions',
-                '--verbose',
-                '--output-format', 'stream-json',
-                continuation_flag,
-                '-p', prompt_content
-            ]
-        else:
-            # Older version - use initial message to set title
-            cmd = [
-                'happy',
-                'claude',
-                '--dangerously-skip-permissions',
-                '--verbose',
-                '--output-format', 'stream-json',
-                continuation_flag,
-                '-p', f'Tell happy to change the title to {session_title}\n\n{prompt_content}'
-            ]
+        cmd = [
+            'happy',
+            'claude',
+            '--dangerously-skip-permissions',
+            '--verbose',
+            '--output-format', 'stream-json',
+            continuation_flag,
+            '-p', prompt_content
+        ]
     else:
         # Direct claude command
         cmd = [
