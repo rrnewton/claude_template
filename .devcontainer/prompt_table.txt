@@ -2,7 +2,8 @@
 # Each prompt has weight 1, giving equal probability to all
 
 30   prompts/generic_forward_progress_task.md
-20   prompts/expand_MTG_compatibility.md
-20   prompts/heuristic_ai_progress.md
-20   prompts/optimization_task.md
-10   prompts/specific_task_postscript.md
+15   prompts/expand_MTG_compatibility.md
+15   prompts/optimization_task.md
+15   prompts/heuristic_ai_progress.md
+15   prompts/task_gardening.md
+10   prompts/integration_work.md
