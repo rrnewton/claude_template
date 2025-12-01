@@ -478,10 +478,10 @@ def run_server(prompt_stream: PromptStream, logs_dir: Path, work_dir: Path):
 
         return f"Launched {count} iterations for session {session_id}. They will run in the background."
 
-    print(f"Starting MCP server...")
-    print(f"  Logs directory: {logs_dir}")
-    print(f"  Work directory: {work_dir}")
-    print(f"  Current iteration: {prompt_stream.iteration}")
+    print(f"Starting MCP server...", file=sys.stderr)
+    print(f"  Logs directory: {logs_dir}", file=sys.stderr)
+    print(f"  Work directory: {work_dir}", file=sys.stderr)
+    print(f"  Current iteration: {prompt_stream.iteration}", file=sys.stderr)
     mcp.run()
 
 
