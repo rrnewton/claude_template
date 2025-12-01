@@ -30,6 +30,10 @@ INTEGRATE_FREQUENTLY_PREFIX = """Other agents may be running in parallel with yo
 
 """
 
+CHECK_CI_PREFIX = """Ensure CI is green (gh run list) before you get to work. If not, examine the breakage and push a fix to CI before proceeding.
+
+"""
+
 
 class PromptStream:
     """Manages the prompt stream for iterations.
@@ -38,17 +42,19 @@ class PromptStream:
     """
 
     def __init__(self, prompts: List[Tuple[int, Path]], fixed_prompt: Optional[Path] = None,
-                 integrate_frequently: bool = False):
+                 integrate_frequently: bool = False, check_ci: bool = False):
         """Initialize the prompt stream.
 
         Args:
             prompts: List of (weight, path) tuples for weighted random selection
             fixed_prompt: If provided, use this prompt for all iterations (constant mode)
             integrate_frequently: If True, prepend integration instructions to each prompt
+            check_ci: If True, prepend CI check instructions to each prompt
         """
         self.prompts = prompts
         self.fixed_prompt = fixed_prompt
         self.integrate_frequently = integrate_frequently
+        self.check_ci = check_ci
         self.iteration = 0
 
     def _select_weighted_prompt(self) -> Path:
@@ -83,6 +89,8 @@ class PromptStream:
 
         # Build prompt with optional prefixes
         header = f"(Iteration {self.iteration})\n\n"
+        if self.check_ci:
+            header += CHECK_CI_PREFIX
         if self.integrate_frequently:
             header += INTEGRATE_FREQUENTLY_PREFIX
         return self.iteration, header + content, prompt_file
@@ -574,6 +582,8 @@ Prompt table format (for --prompt-table):
                                help='Check if prior task is complete before starting new prompt')
     options_group.add_argument('--integrate-frequently', action='store_true',
                                help='Prepend instructions to rebase/push frequently for parallel agents')
+    options_group.add_argument('--check-ci', action='store_true',
+                               help='Prepend instructions to check CI status before starting')
     options_group.add_argument('--server', action='store_true',
                                help='Run as MCP server instead of executing iterations')
 
@@ -664,7 +674,8 @@ Prompt table format (for --prompt-table):
 
     # Create prompt stream
     prompt_stream = PromptStream(builtin_prompts, fixed_prompt,
-                                  integrate_frequently=args.integrate_frequently)
+                                  integrate_frequently=args.integrate_frequently,
+                                  check_ci=args.check_ci)
 
     # Run in appropriate mode
     if args.server:
