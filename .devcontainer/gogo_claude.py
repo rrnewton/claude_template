@@ -14,6 +14,7 @@ import os
 import random
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -300,7 +301,15 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
                 cwd=work_dir
             )
 
-            # Process output line by line
+            # Collect stderr in background thread to avoid blocking
+            stderr_lines = []
+            def read_stderr():
+                for line in process.stderr:
+                    stderr_lines.append(line)
+            stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+            stderr_thread.start()
+
+            # Process stdout line by line
             for line in process.stdout:
                 # Write to log file
                 log.write(line)
@@ -325,10 +334,17 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
                         pass  # Skip malformed JSON
 
             process.wait()
+            stderr_thread.join(timeout=1)  # Wait briefly for stderr to finish
 
             if process.returncode != 0:
-                stderr = process.stderr.read()
-                print(f"Error running claude: {stderr}", file=sys.stderr)
+                stderr_output = ''.join(stderr_lines).strip()
+                cmd_str = ' '.join(cmd[:4]) + ' ...'  # Show first 4 args of command
+                print(f"Error running command: {cmd_str}", file=sys.stderr)
+                print(f"  Exit code: {process.returncode}", file=sys.stderr)
+                if stderr_output:
+                    print(f"  Stderr: {stderr_output}", file=sys.stderr)
+                else:
+                    print(f"  Stderr: (empty)", file=sys.stderr)
                 return False
 
     except Exception as e:
