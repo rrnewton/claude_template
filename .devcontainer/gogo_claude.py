@@ -26,6 +26,10 @@ BUILTIN_PROMPTS = [
     (20, "task_gardening.md"),                 # 20% - documentation/gardening
 ]
 
+INTEGRATE_FREQUENTLY_PREFIX = """Other agents may be running in parallel with you, let's integrate upstream changes frequently. Before you get to work, fetch the latest changes from origin/main and rebase against them. Whenever you rebase any commits, make sure we still pass validate before proceeding. Also proactively push (and, again, rebase) any work that you commit.
+
+"""
+
 
 class PromptStream:
     """Manages the prompt stream for iterations.
@@ -33,15 +37,18 @@ class PromptStream:
     Handles prompt selection (random weighted or constant) and iteration tracking.
     """
 
-    def __init__(self, prompts: List[Tuple[int, Path]], fixed_prompt: Optional[Path] = None):
+    def __init__(self, prompts: List[Tuple[int, Path]], fixed_prompt: Optional[Path] = None,
+                 integrate_frequently: bool = False):
         """Initialize the prompt stream.
 
         Args:
             prompts: List of (weight, path) tuples for weighted random selection
             fixed_prompt: If provided, use this prompt for all iterations (constant mode)
+            integrate_frequently: If True, prepend integration instructions to each prompt
         """
         self.prompts = prompts
         self.fixed_prompt = fixed_prompt
+        self.integrate_frequently = integrate_frequently
         self.iteration = 0
 
     def _select_weighted_prompt(self) -> Path:
@@ -74,8 +81,10 @@ class PromptStream:
         with open(prompt_file, 'r') as f:
             content = f.read()
 
-        # Prepend iteration header
+        # Build prompt with optional prefixes
         header = f"(Iteration {self.iteration})\n\n"
+        if self.integrate_frequently:
+            header += INTEGRATE_FREQUENTLY_PREFIX
         return self.iteration, header + content, prompt_file
 
 
@@ -563,6 +572,8 @@ Prompt table format (for --prompt-table):
                                help='Use happy prompt to send to an existing session')
     options_group.add_argument('--continue-unfinished', action='store_true',
                                help='Check if prior task is complete before starting new prompt')
+    options_group.add_argument('--integrate-frequently', action='store_true',
+                               help='Prepend instructions to rebase/push frequently for parallel agents')
     options_group.add_argument('--server', action='store_true',
                                help='Run as MCP server instead of executing iterations')
 
@@ -652,7 +663,8 @@ Prompt table format (for --prompt-table):
     print(f"Prompt mode: {prompt_mode}\n")
 
     # Create prompt stream
-    prompt_stream = PromptStream(builtin_prompts, fixed_prompt)
+    prompt_stream = PromptStream(builtin_prompts, fixed_prompt,
+                                  integrate_frequently=args.integrate_frequently)
 
     # Run in appropriate mode
     if args.server:
