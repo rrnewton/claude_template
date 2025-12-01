@@ -221,6 +221,7 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
             'happy',
             'prompt',
             '-s', existing_happy_session,
+            '--timeout', '60',
             '-p', prompt_content
         ]
     elif use_happy:
