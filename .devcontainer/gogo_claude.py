@@ -163,7 +163,8 @@ def check_task_complete(work_dir: Path) -> bool:
 
 
 def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path, use_happy: bool, script_dir: Path,
-                  work_dir: Path, continue_conversation: bool = False, override_prompt: str = None) -> bool:
+                  work_dir: Path, continue_conversation: bool = False, override_prompt: str = None,
+                  existing_happy_session: str = None) -> bool:
     """Run a single iteration with claude.
 
     Args:
@@ -176,6 +177,7 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
         work_dir: Working directory for running claude
         continue_conversation: If True, use --continue flag to continue prior conversation
         override_prompt: If provided, use this string as the prompt instead of reading from prompt_file
+        existing_happy_session: If provided, use 'happy prompt -s <session>' to reuse an existing session
     """
     print(f"\n=== Iteration {iteration} of {total} ===")
 
@@ -207,8 +209,16 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
     continuation_flag = '--continue' if continue_conversation else '-c'
 
     # Build claude command
-    if use_happy:
-        # Use happy wrapper
+    if existing_happy_session:
+        # Use happy prompt to send to an existing session
+        cmd = [
+            'happy',
+            'prompt',
+            '-s', existing_happy_session,
+            '-p', prompt_content
+        ]
+    elif use_happy:
+        # Use happy wrapper to create a new session
         cmd = [
             'happy',
             'claude',
@@ -310,7 +320,8 @@ Examples:
   %(prog)s --constant-builtin=general 5          # All iterations use generic_forward_progress_task.md
   %(prog)s --constant-prompt task.md 5           # All iterations use custom prompt file
   %(prog)s --prompt-table table.txt 5            # Use weighted prompts from table file
-  %(prog)s --random-builtin --happy 5            # Use happy wrapper with session title
+  %(prog)s --random-builtin --happy 5            # Use happy wrapper (new session)
+  %(prog)s --random-builtin --existing-happy=abc123 5  # Send prompts to existing happy session
   %(prog)s --random-builtin --continue-unfinished 5  # Check task completion between iterations
 
 Prompt table format (for --prompt-table):
@@ -340,7 +351,9 @@ Prompt table format (for --prompt-table):
     # Additional options
     options_group = parser.add_argument_group('Additional Options')
     options_group.add_argument('--happy', action='store_true',
-                               help='Use happy wrapper (reads session title from .session_title.txt)')
+                               help='Use happy wrapper to create a new session')
+    options_group.add_argument('--existing-happy', type=str, metavar='SESSION_ID',
+                               help='Use happy prompt to send to an existing session')
     options_group.add_argument('--continue-unfinished', action='store_true',
                                help='Check if prior task is complete before starting new prompt')
 
@@ -350,6 +363,10 @@ Prompt table format (for --prompt-table):
     prompt_stream_options = [args.random_builtin, args.constant_builtin, args.constant_prompt, args.prompt_table]
     if not any(prompt_stream_options):
         parser.error("One of --random-builtin, --constant-builtin, --constant-prompt, or --prompt-table is required")
+
+    # --happy and --existing-happy are mutually exclusive
+    if args.happy and args.existing_happy:
+        parser.error("--happy and --existing-happy are mutually exclusive")
 
     # Setup paths
     script_dir = Path(__file__).parent
@@ -442,7 +459,8 @@ Prompt table format (for --prompt-table):
             # We still need a prompt_file for logging purposes, use the last one
             continuation_prompt = CONTINUE_TASK_PROMPT_TEMPLATE.format(prior_prompt=prior_prompt_content)
             success = run_iteration(i, args.iterations, prompt_file, logs_dir, args.happy, script_dir,
-                                    work_dir, continue_conversation=True, override_prompt=continuation_prompt)
+                                    work_dir, continue_conversation=True, override_prompt=continuation_prompt,
+                                    existing_happy_session=args.existing_happy)
             # Note: prior_prompt_content stays the same since we're continuing the same task
         else:
             # Select a new prompt for this iteration
@@ -460,7 +478,8 @@ Prompt table format (for --prompt-table):
                 prior_prompt_content = f.read()
 
             # Run the iteration with a fresh prompt
-            success = run_iteration(i, args.iterations, prompt_file, logs_dir, args.happy, script_dir, work_dir)
+            success = run_iteration(i, args.iterations, prompt_file, logs_dir, args.happy, script_dir, work_dir,
+                                    existing_happy_session=args.existing_happy)
 
         if not success:
             sys.exit(1)
