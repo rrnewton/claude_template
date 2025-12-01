@@ -91,7 +91,8 @@ def select_weighted_prompt(prompts: List[Tuple[int, Path]]) -> Path:
 def find_next_log_number(logs_dir: Path) -> int:
     """Find the next available log number."""
     num = 1
-    while (logs_dir / f"claude_workstream{num:02d}.jsonl").exists():
+    while ((logs_dir / f"claude_workstream{num:02d}.jsonl").exists() or
+           (logs_dir / f"claude_workstream{num:02d}.log").exists()):
         num += 1
     return num
 
@@ -183,8 +184,13 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
 
     # Find unused log filename
     log_num = find_next_log_number(logs_dir)
-    log_file = logs_dir / f"claude_workstream{log_num:02d}.jsonl"
-    latest_link = logs_dir / "claude_workstream_latest.jsonl"
+    # Use .log for existing-happy (plain text), .jsonl for others (JSON stream)
+    if existing_happy_session:
+        log_file = logs_dir / f"claude_workstream{log_num:02d}.log"
+        latest_link = logs_dir / "claude_workstream_latest.log"
+    else:
+        log_file = logs_dir / f"claude_workstream{log_num:02d}.jsonl"
+        latest_link = logs_dir / "claude_workstream_latest.jsonl"
 
     print(f"Using log file: {log_file}")
 
@@ -260,19 +266,23 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
                 log.write(line)
                 log.flush()
 
-                # Try to parse and display
-                try:
-                    data = json.loads(line)
-                    if data.get('type') in ['assistant', 'result']:
-                        # Extract text content
-                        if 'message' in data and 'content' in data['message']:
-                            for content in data['message']['content']:
-                                if 'text' in content:
-                                    print(content['text'], end='')
-                        elif 'result' in data:
-                            print(f"\nResult: {data['result']}")
-                except json.JSONDecodeError:
-                    pass  # Skip malformed JSON
+                if existing_happy_session:
+                    # For existing happy sessions, just tail the output directly
+                    print(line, end='')
+                else:
+                    # Try to parse and display JSON output
+                    try:
+                        data = json.loads(line)
+                        if data.get('type') in ['assistant', 'result']:
+                            # Extract text content
+                            if 'message' in data and 'content' in data['message']:
+                                for content in data['message']['content']:
+                                    if 'text' in content:
+                                        print(content['text'], end='')
+                            elif 'result' in data:
+                                print(f"\nResult: {data['result']}")
+                    except json.JSONDecodeError:
+                        pass  # Skip malformed JSON
 
             process.wait()
 
