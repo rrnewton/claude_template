@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """
 A simple wrapper to drive claude repeatedly with prompts.
+
+Can run in two modes:
+1. CLI mode: Run iterations directly from command line
+2. Server mode: Run as MCP server exposing prompt stream tools
 """
 
 import argparse
+import asyncio
 import json
 import os
 import random
 import subprocess
 import sys
+import threading
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 
 # Built-in prompts with weights (probabilities out of 100)
@@ -19,6 +25,75 @@ BUILTIN_PROMPTS = [
     (30, "optimization_task.md"),              # 30% - optimization
     (20, "task_gardening.md"),                 # 20% - documentation/gardening
 ]
+
+INTEGRATE_FREQUENTLY_PREFIX = """Other agents may be running in parallel with you, let's integrate upstream changes frequently. Before you get to work, fetch the latest changes from origin/main and rebase against them. Whenever you rebase any commits, make sure we still pass validate before proceeding. Also proactively push (and, again, rebase) any work that you commit.
+
+"""
+
+CHECK_CI_PREFIX = """Ensure CI is green (gh run list) before you get to work. If not, examine the breakage and push a fix to CI before proceeding.
+
+"""
+
+
+class PromptStream:
+    """Manages the prompt stream for iterations.
+
+    Handles prompt selection (random weighted or constant) and iteration tracking.
+    """
+
+    def __init__(self, prompts: List[Tuple[int, Path]], fixed_prompt: Optional[Path] = None,
+                 integrate_frequently: bool = False, check_ci: bool = False):
+        """Initialize the prompt stream.
+
+        Args:
+            prompts: List of (weight, path) tuples for weighted random selection
+            fixed_prompt: If provided, use this prompt for all iterations (constant mode)
+            integrate_frequently: If True, prepend integration instructions to each prompt
+            check_ci: If True, prepend CI check instructions to each prompt
+        """
+        self.prompts = prompts
+        self.fixed_prompt = fixed_prompt
+        self.integrate_frequently = integrate_frequently
+        self.check_ci = check_ci
+        self.iteration = 0
+
+    def _select_weighted_prompt(self) -> Path:
+        """Select a random prompt based on weights."""
+        total_weight = sum(weight for weight, _ in self.prompts)
+        rand = random.randint(1, total_weight)
+
+        cumulative = 0
+        for weight, path in self.prompts:
+            cumulative += weight
+            if rand <= cumulative:
+                return path
+
+        # Fallback (shouldn't reach here)
+        return self.prompts[0][1]
+
+    def get_next_prompt(self) -> Tuple[int, str, Path]:
+        """Get the next prompt in the stream.
+
+        Returns:
+            Tuple of (iteration_number, prompt_content_with_header, prompt_file_path)
+        """
+        self.iteration += 1
+
+        if self.fixed_prompt:
+            prompt_file = self.fixed_prompt
+        else:
+            prompt_file = self._select_weighted_prompt()
+
+        with open(prompt_file, 'r') as f:
+            content = f.read()
+
+        # Build prompt with optional prefixes
+        header = f"(Iteration {self.iteration})\n\n"
+        if self.check_ci:
+            header += CHECK_CI_PREFIX
+        if self.integrate_frequently:
+            header += INTEGRATE_FREQUENTLY_PREFIX
+        return self.iteration, header + content, prompt_file
 
 
 def load_prompt_table(table_file: Path, script_dir: Path) -> List[Tuple[int, Path]]:
@@ -71,21 +146,6 @@ def load_prompt_table(table_file: Path, script_dir: Path) -> List[Tuple[int, Pat
         raise ValueError(f"No valid prompts found in {table_file}")
     
     return prompts
-
-
-def select_weighted_prompt(prompts: List[Tuple[int, Path]]) -> Path:
-    """Select a random prompt based on weights."""
-    total_weight = sum(weight for weight, _ in prompts)
-    rand = random.randint(1, total_weight)
-
-    cumulative = 0
-    for weight, path in prompts:
-        cumulative += weight
-        if rand <= cumulative:
-            return path
-
-    # Fallback (shouldn't reach here)
-    return prompts[0][1]
 
 
 def find_next_log_number(logs_dir: Path) -> int:
@@ -261,7 +321,15 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
                 cwd=work_dir
             )
 
-            # Process output line by line
+            # Collect stderr in background thread to avoid blocking
+            stderr_lines = []
+            def read_stderr():
+                for line in process.stderr:
+                    stderr_lines.append(line)
+            stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+            stderr_thread.start()
+
+            # Process stdout line by line
             for line in process.stdout:
                 # Write to log file
                 log.write(line)
@@ -286,10 +354,17 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
                         pass  # Skip malformed JSON
 
             process.wait()
+            stderr_thread.join(timeout=1)  # Wait briefly for stderr to finish
 
             if process.returncode != 0:
-                stderr = process.stderr.read()
-                print(f"Error running claude: {stderr}", file=sys.stderr)
+                stderr_output = ''.join(stderr_lines).strip()
+                cmd_str = ' '.join(cmd[:4]) + ' ...'  # Show first 4 args of command
+                print(f"Error running command: {cmd_str}", file=sys.stderr)
+                print(f"  Exit code: {process.returncode}", file=sys.stderr)
+                if stderr_output:
+                    print(f"  Stderr: {stderr_output}", file=sys.stderr)
+                else:
+                    print(f"  Stderr: (empty)", file=sys.stderr)
                 return False
 
     except Exception as e:
@@ -305,6 +380,145 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
 
     print(f"\nCompleted iteration {iteration}")
     return True
+
+
+# =============================================================================
+# MCP Server Mode
+# =============================================================================
+
+def run_happy_prompt_iteration(session_id: str, prompt_content: str, iteration: int,
+                                logs_dir: Path, work_dir: Path) -> bool:
+    """Run a single happy prompt iteration.
+
+    Args:
+        session_id: Happy session ID to send prompt to
+        prompt_content: The prompt content (already includes iteration header)
+        iteration: Current iteration number (for logging)
+        logs_dir: Directory for log files
+        work_dir: Working directory
+
+    Returns:
+        True if successful, False on error
+    """
+    # Find unused log filename
+    log_num = find_next_log_number(logs_dir)
+    log_file = logs_dir / f"claude_workstream{log_num:02d}.log"
+
+    cmd = [
+        'happy',
+        'prompt',
+        '-s', session_id,
+        '--timeout', '60',
+        '-p', prompt_content
+    ]
+
+    try:
+        with open(log_file, 'a') as log:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=work_dir
+            )
+
+            for line in process.stdout:
+                log.write(line)
+                log.flush()
+
+            process.wait()
+
+            if process.returncode != 0:
+                stderr = process.stderr.read()
+                print(f"Error in iteration {iteration}: {stderr}", file=sys.stderr)
+                return False
+
+    except Exception as e:
+        print(f"Error during iteration {iteration}: {e}", file=sys.stderr)
+        return False
+
+    return True
+
+
+async def run_iterations_background(prompt_stream: PromptStream, session_id: str,
+                                     count: int, logs_dir: Path, work_dir: Path):
+    """Run multiple iterations in the background.
+
+    Stops on first error but doesn't crash the server.
+    """
+    # Small delay before starting
+    await asyncio.sleep(2)
+
+    for _ in range(count):
+        iteration, prompt_content, prompt_file = prompt_stream.get_next_prompt()
+        print(f"[Background] Starting iteration {iteration} with {prompt_file.name}")
+
+        # Run in executor to not block the event loop
+        loop = asyncio.get_event_loop()
+        success = await loop.run_in_executor(
+            None,
+            run_happy_prompt_iteration,
+            session_id, prompt_content, iteration, logs_dir, work_dir
+        )
+
+        if not success:
+            print(f"[Background] Stopping iterations due to error at iteration {iteration}")
+            break
+
+        print(f"[Background] Completed iteration {iteration}")
+
+    print(f"[Background] Finished iteration batch")
+
+
+def run_server(prompt_stream: PromptStream, logs_dir: Path, work_dir: Path):
+    """Run the MCP server mode."""
+    try:
+        from fastmcp import FastMCP
+    except ImportError:
+        print("Error: fastmcp is required for server mode. Install with: pip install fastmcp",
+              file=sys.stderr)
+        sys.exit(1)
+
+    mcp = FastMCP("gogo_claude")
+
+    @mcp.tool
+    def next_prompt() -> str:
+        """Get the next prompt from the stream.
+
+        Returns the prompt content with an iteration header prepended.
+        Use this to get a new task prompt for the current session.
+        """
+        iteration, content, prompt_file = prompt_stream.get_next_prompt()
+        print(f"[MCP] Serving iteration {iteration} ({prompt_file.name})")
+        return content
+
+    @mcp.tool
+    def launch_iterations(session_id: str, count: int) -> str:
+        """Launch multiple iterations in the background.
+
+        Args:
+            session_id: The happy session ID to send prompts to
+            count: Number of iterations to run
+
+        Returns immediately. Iterations run in background and stop on first error.
+        """
+        if count < 1:
+            return "Error: count must be at least 1"
+        if count > 100:
+            return "Error: count must be at most 100"
+
+        # Schedule the background task
+        asyncio.create_task(
+            run_iterations_background(prompt_stream, session_id, count, logs_dir, work_dir)
+        )
+
+        return f"Launched {count} iterations for session {session_id}. They will run in the background."
+
+    print(f"Starting MCP server...", file=sys.stderr)
+    print(f"  Logs directory: {logs_dir}", file=sys.stderr)
+    print(f"  Work directory: {work_dir}", file=sys.stderr)
+    print(f"  Current iteration: {prompt_stream.iteration}", file=sys.stderr)
+    mcp.run()
 
 
 def main():
@@ -334,6 +548,7 @@ Examples:
   %(prog)s --random-builtin --happy 5            # Use happy wrapper (new session)
   %(prog)s --random-builtin --existing-happy=abc123 5  # Send prompts to existing happy session
   %(prog)s --random-builtin --continue-unfinished 5  # Check task completion between iterations
+  %(prog)s --random-builtin --server             # Run as MCP server
 
 Prompt table format (for --prompt-table):
   Each line: <WEIGHT> <PROMPTFILE>
@@ -344,7 +559,8 @@ Prompt table format (for --prompt-table):
         """
     )
 
-    parser.add_argument('iterations', type=int, help='Number of iterations to run')
+    parser.add_argument('iterations', type=int, nargs='?', default=None,
+                        help='Number of iterations to run (not required for --server mode)')
 
     # Prompt Supply Stream options (mutually exclusive, one required)
     prompt_stream_group = parser.add_argument_group('Prompt Supply Stream (one required)')
@@ -367,6 +583,12 @@ Prompt table format (for --prompt-table):
                                help='Use happy prompt to send to an existing session')
     options_group.add_argument('--continue-unfinished', action='store_true',
                                help='Check if prior task is complete before starting new prompt')
+    options_group.add_argument('--integrate-frequently', action='store_true',
+                               help='Prepend instructions to rebase/push frequently for parallel agents')
+    options_group.add_argument('--check-ci', action='store_true',
+                               help='Prepend instructions to check CI status before starting')
+    options_group.add_argument('--server', action='store_true',
+                               help='Run as MCP server instead of executing iterations')
 
     args = parser.parse_args()
 
@@ -375,9 +597,18 @@ Prompt table format (for --prompt-table):
     if not any(prompt_stream_options):
         parser.error("One of --random-builtin, --constant-builtin, --constant-prompt, or --prompt-table is required")
 
-    # --happy and --existing-happy are mutually exclusive
-    if args.happy and args.existing_happy:
-        parser.error("--happy and --existing-happy are mutually exclusive")
+    # Validate mode-specific requirements
+    if args.server:
+        # Server mode doesn't need iterations count
+        if args.happy or args.existing_happy or args.continue_unfinished:
+            parser.error("--server cannot be used with --happy, --existing-happy, or --continue-unfinished")
+    else:
+        # CLI mode requires iterations
+        if args.iterations is None:
+            parser.error("iterations is required (unless using --server mode)")
+        # --happy and --existing-happy are mutually exclusive
+        if args.happy and args.existing_happy:
+            parser.error("--happy and --existing-happy are mutually exclusive")
 
     # Setup paths
     script_dir = Path(__file__).parent
@@ -416,7 +647,6 @@ Prompt table format (for --prompt-table):
         except Exception as e:
             parser.error(f"Failed to load prompt table: {e}")
         fixed_prompt = None
-        use_constant_mode = False
     elif args.constant_prompt:
         # Resolve --constant-prompt path relative to original CWD
         prompt_path = Path(args.constant_prompt)
@@ -427,7 +657,6 @@ Prompt table format (for --prompt-table):
             parser.error(f"Prompt file not found: {prompt_path}")
         fixed_prompt = prompt_path
         prompt_mode = f"constant prompt ({prompt_path.name})"
-        use_constant_mode = True
     elif args.constant_builtin:
         builtin_map = {
             'optimize': ("optimization_task.md", "optimization"),
@@ -436,11 +665,9 @@ Prompt table format (for --prompt-table):
         }
         filename, prompt_mode = builtin_map[args.constant_builtin]
         fixed_prompt = prompt_dir / filename
-        use_constant_mode = True
     elif args.random_builtin:
         fixed_prompt = None
         prompt_mode = "random weighted selection"
-        use_constant_mode = False
     else:
         # Should not reach here due to earlier validation
         parser.error("No prompt supply stream specified")
@@ -448,11 +675,27 @@ Prompt table format (for --prompt-table):
     # Print mode message
     print(f"Prompt mode: {prompt_mode}\n")
 
+    # Create prompt stream
+    prompt_stream = PromptStream(builtin_prompts, fixed_prompt,
+                                  integrate_frequently=args.integrate_frequently,
+                                  check_ci=args.check_ci)
+
+    # Run in appropriate mode
+    if args.server:
+        run_server(prompt_stream, logs_dir, work_dir)
+    else:
+        run_cli_mode(args, prompt_stream, logs_dir, work_dir, script_dir, prompt_mode)
+
+
+def run_cli_mode(args, prompt_stream: PromptStream, logs_dir: Path, work_dir: Path,
+                 script_dir: Path, prompt_mode: str):
+    """Run the CLI iteration mode."""
     if args.continue_unfinished:
         print("Continue-unfinished mode enabled: will check if prior task is complete before each iteration\n")
 
     # Track the prior prompt content for continuation
     prior_prompt_content = None
+    prompt_file = None
 
     # Run iterations
     for i in range(1, args.iterations + 1):
@@ -474,23 +717,17 @@ Prompt table format (for --prompt-table):
                                     existing_happy_session=args.existing_happy)
             # Note: prior_prompt_content stays the same since we're continuing the same task
         else:
-            # Select a new prompt for this iteration
-            if use_constant_mode:
-                # Constant mode: use the same prompt for all iterations
-                prompt_file = fixed_prompt
-                print(f"Using {prompt_mode} for iteration {i}")
-            else:
-                # Random/table mode: select from prompts based on weights
-                prompt_file = select_weighted_prompt(builtin_prompts)
-                print(f"Selected prompt for iteration {i}: {prompt_file.name}")
+            # Get next prompt from stream
+            iteration, prompt_content, prompt_file = prompt_stream.get_next_prompt()
+            print(f"Using {prompt_file.name} for iteration {i}")
 
-            # Read and store the prompt content for potential future continuation
+            # Store raw content (without iteration header) for continuation
             with open(prompt_file, 'r') as f:
                 prior_prompt_content = f.read()
 
-            # Run the iteration with a fresh prompt
+            # Run the iteration with the prompt (which already has iteration header)
             success = run_iteration(i, args.iterations, prompt_file, logs_dir, args.happy, script_dir, work_dir,
-                                    existing_happy_session=args.existing_happy)
+                                    existing_happy_session=args.existing_happy, override_prompt=prompt_content)
 
         if not success:
             sys.exit(1)
