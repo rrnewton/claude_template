@@ -12,11 +12,26 @@ import asyncio
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import List, Optional, Tuple
+
+
+# Connection retry configuration
+MAX_CONNECTION_RETRIES = 3
+RETRY_DELAY_SECONDS = 5
+
+# Pattern to detect connection refused errors
+CONNECTION_REFUSED_PATTERN = re.compile(r'connect ECONNREFUSED|connection refused|ECONNRESET', re.IGNORECASE)
+
+
+def is_connection_error(stderr_output: str) -> bool:
+    """Check if the error output indicates a connection failure."""
+    return bool(CONNECTION_REFUSED_PATTERN.search(stderr_output))
 
 
 # Built-in prompts with weights (probabilities out of 100)
@@ -223,6 +238,23 @@ def check_task_complete(work_dir: Path) -> bool:
         return False
 
 
+class IterationState:
+    """Tracks state across iterations for failover handling."""
+
+    def __init__(self):
+        self.happy_failed_permanently = False  # If True, use direct claude
+
+    def mark_happy_failed(self):
+        """Mark happy as failed, will use direct claude for remaining iterations."""
+        self.happy_failed_permanently = True
+        print("\n*** Happy has failed permanently - falling back to direct claude for remaining iterations ***\n",
+              file=sys.stderr)
+
+
+# Global iteration state for failover tracking
+_iteration_state = IterationState()
+
+
 def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path, use_happy: bool, script_dir: Path,
                   work_dir: Path, continue_conversation: bool = False, override_prompt: str = None,
                   existing_happy_session: str = None) -> bool:
@@ -239,8 +271,20 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
         continue_conversation: If True, use --continue flag to continue prior conversation
         override_prompt: If provided, use this string as the prompt instead of reading from prompt_file
         existing_happy_session: If provided, use 'happy prompt -s <session>' to reuse an existing session
+
+    Returns:
+        True if iteration succeeded, False otherwise
     """
     print(f"\n=== Iteration {iteration} of {total} ===")
+
+    # Check for happy failover
+    if _iteration_state.happy_failed_permanently:
+        if existing_happy_session:
+            print("Skipping existing-happy session due to previous happy failures", file=sys.stderr)
+            existing_happy_session = None
+        if use_happy:
+            print("Using direct claude due to previous happy failures")
+            use_happy = False
 
     # Find unused log filename
     log_num = find_next_log_number(logs_dir)
@@ -274,39 +318,127 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
     # -c: allow multiple conversations in one session (but start fresh)
     continuation_flag = '--continue' if continue_conversation else '-c'
 
-    # Build claude command
-    if existing_happy_session:
-        # Use happy prompt to send to an existing session
-        cmd = [
-            'happy',
-            'prompt',
-            '-s', existing_happy_session,
-            '--timeout', '60',
-            '-p', prompt_content
-        ]
-    elif use_happy:
-        # Use happy wrapper to create a new session
-        cmd = [
-            'happy',
-            'claude',
-            '--dangerously-skip-permissions',
-            '--verbose',
-            '--output-format', 'stream-json',
-            continuation_flag,
-            '-p', prompt_content
-        ]
-    else:
-        # Direct claude command
-        cmd = [
-            'claude',
-            '--dangerously-skip-permissions',
-            '--verbose',
-            '--output-format', 'stream-json',
-            continuation_flag,
-            '-p', prompt_content
-        ]
+    # Try running with retry logic for connection errors
+    return _run_iteration_with_retry(
+        iteration=iteration,
+        log_file=log_file,
+        prompt_content=prompt_content,
+        continuation_flag=continuation_flag,
+        use_happy=use_happy,
+        existing_happy_session=existing_happy_session,
+        work_dir=work_dir
+    )
 
-    # Run claude command with tee-like behavior
+
+def _run_iteration_with_retry(iteration: int, log_file: Path, prompt_content: str,
+                               continuation_flag: str, use_happy: bool,
+                               existing_happy_session: Optional[str], work_dir: Path) -> bool:
+    """Run an iteration with retry logic for connection errors.
+
+    Retries up to MAX_CONNECTION_RETRIES times for connection errors.
+    If all retries fail and we're using happy, falls back to direct claude.
+    """
+    using_happy = use_happy or existing_happy_session
+
+    for attempt in range(MAX_CONNECTION_RETRIES + 1):
+        if attempt > 0:
+            print(f"\n--- Retry attempt {attempt}/{MAX_CONNECTION_RETRIES} after {RETRY_DELAY_SECONDS}s delay ---")
+            time.sleep(RETRY_DELAY_SECONDS)
+
+        # Build command based on current mode
+        if existing_happy_session and not _iteration_state.happy_failed_permanently:
+            cmd = [
+                'happy',
+                'prompt',
+                '-s', existing_happy_session,
+                '--timeout', '60',
+                '-p', prompt_content
+            ]
+            is_happy_cmd = True
+        elif use_happy and not _iteration_state.happy_failed_permanently:
+            cmd = [
+                'happy',
+                'claude',
+                '--dangerously-skip-permissions',
+                '--verbose',
+                '--output-format', 'stream-json',
+                continuation_flag,
+                '-p', prompt_content
+            ]
+            is_happy_cmd = True
+        else:
+            cmd = [
+                'claude',
+                '--dangerously-skip-permissions',
+                '--verbose',
+                '--output-format', 'stream-json',
+                continuation_flag,
+                '-p', prompt_content
+            ]
+            is_happy_cmd = False
+
+        success, stderr_output = _execute_iteration_command(
+            cmd=cmd,
+            log_file=log_file,
+            work_dir=work_dir,
+            is_existing_happy=(existing_happy_session and not _iteration_state.happy_failed_permanently)
+        )
+
+        if success:
+            # Check for error.txt in working directory
+            error_file = work_dir / 'error.txt'
+            if error_file.exists():
+                print("\nError detected in error.txt:")
+                print(error_file.read_text())
+                return False
+
+            print(f"\nCompleted iteration {iteration}")
+            return True
+
+        # Check if this is a connection error that we should retry
+        if stderr_output and is_connection_error(stderr_output):
+            if attempt < MAX_CONNECTION_RETRIES:
+                print(f"Connection error detected, will retry...")
+                continue
+            else:
+                # All retries exhausted
+                if is_happy_cmd:
+                    print(f"\nAll {MAX_CONNECTION_RETRIES} retries exhausted for happy connection",
+                          file=sys.stderr)
+                    _iteration_state.mark_happy_failed()
+                    # Try one more time with direct claude
+                    print("Attempting iteration with direct claude...")
+                    success, _ = _execute_iteration_command(
+                        cmd=[
+                            'claude',
+                            '--dangerously-skip-permissions',
+                            '--verbose',
+                            '--output-format', 'stream-json',
+                            continuation_flag,
+                            '-p', prompt_content
+                        ],
+                        log_file=log_file,
+                        work_dir=work_dir,
+                        is_existing_happy=False
+                    )
+                    if success:
+                        print(f"\nCompleted iteration {iteration} (via direct claude fallback)")
+                        return True
+                return False
+        else:
+            # Non-connection error, don't retry
+            return False
+
+    return False
+
+
+def _execute_iteration_command(cmd: List[str], log_file: Path, work_dir: Path,
+                                is_existing_happy: bool) -> Tuple[bool, str]:
+    """Execute a single command for an iteration.
+
+    Returns:
+        Tuple of (success: bool, stderr_output: str)
+    """
     try:
         with open(log_file, 'a') as log:
             # Run subprocess in working directory
@@ -332,7 +464,7 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
                 log.write(line)
                 log.flush()
 
-                if existing_happy_session:
+                if is_existing_happy:
                     # For existing happy sessions, just tail the output directly
                     print(line, end='')
                 else:
@@ -353,8 +485,9 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
             process.wait()
             stderr_thread.join(timeout=1)  # Wait briefly for stderr to finish
 
+            stderr_output = ''.join(stderr_lines).strip()
+
             if process.returncode != 0:
-                stderr_output = ''.join(stderr_lines).strip()
                 cmd_str = ' '.join(cmd[:4]) + ' ...'  # Show first 4 args of command
                 print(f"Error running command: {cmd_str}", file=sys.stderr)
                 print(f"  Exit code: {process.returncode}", file=sys.stderr)
@@ -362,21 +495,13 @@ def run_iteration(iteration: int, total: int, prompt_file: Path, logs_dir: Path,
                     print(f"  Stderr: {stderr_output}", file=sys.stderr)
                 else:
                     print(f"  Stderr: (empty)", file=sys.stderr)
-                return False
+                return False, stderr_output
+
+            return True, stderr_output
 
     except Exception as e:
         print(f"Error during iteration: {e}", file=sys.stderr)
-        return False
-
-    # Check for error.txt in working directory
-    error_file = work_dir / 'error.txt'
-    if error_file.exists():
-        print("\nError detected in error.txt:")
-        print(error_file.read_text())
-        return False
-
-    print(f"\nCompleted iteration {iteration}")
-    return True
+        return False, str(e)
 
 
 # =============================================================================
