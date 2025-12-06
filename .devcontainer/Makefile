@@ -88,6 +88,12 @@ root:
 		-v `pwd`/..:$(WORKDIR) \
 		$(FULLTAG) bash
 
+root-with-port:
+	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
+		-v `pwd`/..:$(WORKDIR) -p 8080:8080 \
+		$(FULLTAG) bash
+
 privileged:
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root \
