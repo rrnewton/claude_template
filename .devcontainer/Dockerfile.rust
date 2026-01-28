@@ -11,4 +11,4 @@ RUN cargo install --git https://github.com/rrnewton/minibeads --tag v0.15 && \
     ln -s /opt/cargo/bin/mb /opt/cargo/bin/bd
 
 RUN apt-get install -y heaptrack
-RUN cargo install cargo-heaptrack cargo-nextest
+RUN cargo install cargo-heaptrack && cargo install --locked cargo-nextest
