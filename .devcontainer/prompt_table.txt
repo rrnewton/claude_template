@@ -4,6 +4,7 @@
 30   prompts/generic_forward_progress_task.md
 15   prompts/expand_MTG_compatibility.md
 15   prompts/optimization_task.md
-15   prompts/heuristic_ai_progress.md
-15   prompts/task_gardening.md
+10   prompts/task_gardening.md
 10   prompts/integration_work.md
+10   prompts/heuristic_ai_progress.md
+10   prompts/ignored_tasks.md
