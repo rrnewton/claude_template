@@ -42,7 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Going to a newer version for github copilot
 RUN apt-get install -y ca-certificates && \
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 
 ARG NODE_VERSION=24
 
@@ -60,7 +60,8 @@ ENV PATH=$PATH:/bin/versions/node/24/bin/
 
 # [RRN] Differ in the non-root user we use from the node image:
 # ENV MYUSER=node
-ENV MYUSER=ubuntu
+# ENV MYUSER=ubuntu
+ENV MYUSER=root
 
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
