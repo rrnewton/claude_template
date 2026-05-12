@@ -7,7 +7,7 @@ Check the github actions CI status for the most recent commit and make sure it n
 
 Now we're ready to select a task to make forward progress. Review the context:
 
- - Tracking issue(s): `bd show mtg-1`
+ - Tracking issue(s): `mb show mtg-1`
  - CLAUDE.md
  - Game rules: rules/02_mtg_rules_condensed_medium_length_gemini.md
  - PROJECT_VISION.md

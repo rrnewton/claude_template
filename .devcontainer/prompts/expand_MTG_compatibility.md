@@ -13,6 +13,27 @@ Method 2: Targetted play
 - Look for errors, problems, or illegal behavior by MTG rules.
 - Fix the problem, expanding our game engine to cover more of MTG.
 
+You can perform `mtg tui` games with random or AI controllers and observe the logs. But for targetted play-testing of particular card features, and for bug reproducers, it is recommended to use these advanced tools, from simple to more thorough:
+
+ * `mtg tui --p1-draw ... --p2-draw ...`: control what's in the initial hand, separate from random draw.
+ * puzzle files: describe an exact starting state (`mtg tui --start-state foo.pzl`), including battlefield
+ * `mtg tui --p1-fixed-inputs ... --p2-fixed-inputs ...` have the first few choices dictated by a fixed script, which must be legal choices
+
+ * agentplay/agent_game.py script: Agents have generally proved BAD at using the fixed input scripts to reproduce a given gameplay problem.  So this script (which also supports puzzle file starting points) calls subagents in a focus way to make choices to drive gameplay, and to drive it towards a specific scenario we want to reproduce. It's slow and takes tokens but should be far more reliable than other approaches.
+
+
+Compatibility tracking
+----------------------
+
+We have HIERARCHICAL issues for tracking the massive topic of MTG compatibility:
+
+ * mtg-3: the top-level tracking issue
+ * Issues with "Set Compatibility:" in the title should track an entire set.
+ * Issues with "Deck Compatibility:" in the title should track a specific deck we are playtesting, this obviously overlaps with set compatibility.
+
+When we are intensively focusing on a set or a deck, we make a tracking issue listing EVERY card in that set/deck.
+Both set and deck tracking issues two should reference individual `Card Compatibility: <NAME>` issues which are created on demand every time we are working on a specific card. When populating the per-card issue, you may have to update multiple tracking set and deck issues.  The individual card issue should track EACH of the aspects of the card, as determined by the agents research -- its casting cost and conditions, its abilities, passive and activated, enter & exit triggers, it's interaction with other cards that have related effects, etc.
+
 Workflow Reminder
 -----------------
 
