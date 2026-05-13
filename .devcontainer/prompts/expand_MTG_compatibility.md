@@ -1,4 +1,15 @@
-Your goal right now is to identify and fix a missing feature in MTG compatibility from considering the `/workspace/forge-java` reference implementation or the MTG rules. MTG is a huge game with a lot of mechanics to cover. To find something broken to fix use one of the two below methods.
+Your goal right now is to identify and fix a missing feature in MTG compatibility from considering the `/workspace/forge-java` reference implementation or the MTG rules. MTG is a huge game with a lot of mechanics to cover.
+
+**FOLLOW THE `compatibility_tracking` SKILL.** It encodes the
+required workflow, per-card beads issue structure, the per-effect
+support matrix in `docs/EFFECT_SUPPORT.md`, the WORKING/PARTIAL/BROKEN
+classification, the mandatory **game-log verification** step, and the
+regression-test requirements. Read
+`.claude/skills/compatibility_tracking/SKILL.md` before doing
+anything else and adhere to it. The instructions below are only the
+batch-driver around that skill.
+
+To find something broken to fix, use one of the two below methods.
 
 Method 1: Bulk play
 -------------------
@@ -21,9 +32,21 @@ You can perform `mtg tui` games with random or AI controllers and observe the lo
 
  * agentplay/agent_game.py script: Agents have generally proved BAD at using the fixed input scripts to reproduce a given gameplay problem.  So this script (which also supports puzzle file starting points) calls subagents in a focus way to make choices to drive gameplay, and to drive it towards a specific scenario we want to reproduce. It's slow and takes tokens but should be far more reliable than other approaches.
 
+Game-log verification is mandatory
+----------------------------------
 
-Compatibility tracking
-----------------------
+A card is **not** "WORKING" until you have a quoted snippet of
+`mtg tui --verbosity 3` log output proving that every printed effect
+emitted the expected message — draws, damage, counters, life changes,
+zone moves, triggers firing, mana produced in the right color, etc.
+Static "the parser produced X" assertions are necessary but never
+sufficient. Sentinel placeholders (`Fixed1`, `Unknown(*)`, raw IDs
+leaking into the log) count as a BROKEN log even if the mechanical
+state is correct. See §2.2 of the `compatibility_tracking` skill for
+the required-evidence table.
+
+Compatibility tracking — TWO artifacts
+--------------------------------------
 
 We have HIERARCHICAL issues for tracking the massive topic of MTG compatibility:
 
@@ -32,7 +55,26 @@ We have HIERARCHICAL issues for tracking the massive topic of MTG compatibility:
  * Issues with "Deck Compatibility:" in the title should track a specific deck we are playtesting, this obviously overlaps with set compatibility.
 
 When we are intensively focusing on a set or a deck, we make a tracking issue listing EVERY card in that set/deck.
-Both set and deck tracking issues two should reference individual `Card Compatibility: <NAME>` issues which are created on demand every time we are working on a specific card. When populating the per-card issue, you may have to update multiple tracking set and deck issues.  The individual card issue should track EACH of the aspects of the card, as determined by the agents research -- its casting cost and conditions, its abilities, passive and activated, enter & exit triggers, it's interaction with other cards that have related effects, etc.
+Both set and deck tracking issues two should reference individual `Card Compatibility: <NAME>` issues which are created on demand every time we are working on a specific card. When populating the per-card issue, you may have to update multiple tracking set and deck issues. Use the §5 template from the `compatibility_tracking` skill verbatim — it specifies the parser-shape evidence, the dated `Findings (...)` block format, the reproducer command, the required log evidence, the references to the unit test and the e2e test, and the trailing `CARD STATUS:` line. The individual card issue should track EACH of the aspects of the card, as determined by the agents research -- its casting cost and conditions, its abilities, passive and activated, enter & exit triggers, its interaction with other cards that have related effects, etc.
+
+In addition to the per-card beads issues, maintain `docs/EFFECT_SUPPORT.md`
+— the per-construct support matrix. Every keyword, trigger pattern,
+activated/static ability shape, replacement effect, mana-production
+form, and SVar/cost/selector primitive that you evaluate gets a row.
+**Every per-card update must be accompanied by a matrix update for any
+script construct whose status changed.** A per-card issue tells you
+"does Sengir Vampire work"; the matrix tells you "does the
+`ChangesZone | Creature.DamagedBy` trigger pattern work, and which
+cards are blocked on it". See §6 of the skill for the row format and
+update rules.
+
+When you find one of the common bug patterns (silent parser drops,
+effect-converter hardcoding, missing engine features, game-log gaps,
+hacky `contains()` on script bodies — see §4 of the skill), file a
+separate `Bug:` beads issue describing the parser/engine gap and
+reference it from BOTH the per-card issue and the matrix row. One
+bug typically affects many cards; do not bury its description inside
+a single card's issue.
 
 Workflow Reminder
 -----------------
@@ -46,9 +88,11 @@ Review the context:
 - CLAUDE.md
 - PROJECT_VISION.md
 - docs/HOWTO_AGENT_PLAY+REPRODUCERS.md
+- `.claude/skills/compatibility_tracking/SKILL.md`  (the workflow)
+- `docs/EFFECT_SUPPORT.md`                          (the support matrix)
 
-Make forward progress on the task and commit it after `make validate` passes. Update the task to reflect the progress or close it if it is complete.
+Make forward progress on the task and commit it after `make validate` passes. Update the task to reflect the progress or close it if it is complete. Run through the §8 quick-reference checklist in the skill before declaring a card done.
 
 If you become completely stuck, write the problem to "error.txt" before you exit.
 
-If you are successful, and `make validate` passes, then commit the changes. Finally, push the changes on the current branch. If there are any upstream commits, pull those and merge them (fixing any merge conflicts and revalidating) before pushing the merged results.
+If you are successful, and `make validate` passes, then commit the changes. Finally, push the changes on the current branch. If there are any upstream commits, pull those and merge them (fixing any merge conflicts and revalidating) before pushing the merged results. Do NOT merge to `main` directly — let `ci-integration-monitor` promote `integration` → `main`.
