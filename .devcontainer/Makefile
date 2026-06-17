@@ -8,25 +8,39 @@ ifeq ($(strip $(TAG)),)
     $(error TAG must be set (from project_name.txt) and not empty!)
 endif
 
-# Get or create workspace name
-# Go up ../ or ../../ until git remote does NOT include claude_template
-# Use directory name, unless it's "workspace", then use git remote name
+# Get or create workspace name.
+#
+# REPONAME must be DETERMINISTIC and cannot go stale: derive it from the
+# PROJECT git remote URL (the enclosing repo that is NOT claude_template),
+# lowercased. github.com/rrnewton/DeepScry.git -> "deepscry". This is robust
+# to the directory being renamed and to a stale home/workspace_name.txt cache.
+#
+# We still cache the result into home/workspace_name.txt (gitignored), but we
+# OVERWRITE the cache whenever it disagrees with the freshly-derived name, so a
+# stale cache (e.g. an old "mtg-forge-rs" from before the repo was renamed) can
+# never win. The cache is only TRUSTED as-is when git can't be queried (e.g.
+# inside a container with no .git), so behaviour degrades gracefully.
+#
+# Walk UP from .. until we find a git remote that is NOT claude_template; that
+# is the project repo. (.. is the .claude_template submodule itself.)
 REPONAME := $(shell \
-	if [ -f ./home/workspace_name.txt ]; then \
+	REPO_NAME=""; \
+	for d in .. ../.. ../../..; do \
+		R=$$(cd "$$d" 2>/dev/null && git remote get-url origin 2>/dev/null); \
+		[ -z "$$R" ] && continue; \
+		echo "$$R" | grep -iq "claude_template" && continue; \
+		REPO_NAME=$$(echo "$$R" | sed -E 's|.*[/:]([^/]+)(\.git)?/?$$|\1|; s|\.git$$||' | tr 'A-Z' 'a-z'); \
+		break; \
+	done; \
+	if [ -n "$$REPO_NAME" ]; then \
+		if [ ! -f ./home/workspace_name.txt ] || [ "$$(cat ./home/workspace_name.txt 2>/dev/null)" != "$$REPO_NAME" ]; then \
+			mkdir -p ./home; echo "$$REPO_NAME" > ./home/workspace_name.txt; \
+		fi; \
+		echo "$$REPO_NAME"; \
+	elif [ -f ./home/workspace_name.txt ]; then \
 		cat ./home/workspace_name.txt; \
 	else \
-		PARENT_REMOTE=$$(cd .. && git remote get-url origin 2>/dev/null); \
-		if echo "$$PARENT_REMOTE" | grep -iq "claude_template"; then \
-			TOPLEVEL=$$(cd ../.. && git rev-parse --show-toplevel 2>/dev/null); \
-		else \
-			TOPLEVEL=$$(cd .. && git rev-parse --show-toplevel 2>/dev/null); \
-		fi; \
-		DIRNAME=$$(basename "$$TOPLEVEL"); \
-		if [ "$$DIRNAME" = "workspace" ]; then \
-			git -C "$$TOPLEVEL" remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)\.git$$|\1|' | tee ./home/workspace_name.txt; \
-		else \
-			echo "$$DIRNAME" | tee ./home/workspace_name.txt; \
-		fi; \
+		echo "workspace"; \
 	fi)
 
 
@@ -68,10 +82,21 @@ endif
 
 # Mount the whole parent dev-deepscry harness (which contains worktrees/, so all
 # agent worktrees are visible inside the container) at /dev-deepscry IF it exists.
-# Resolves to a `-v <parent>:/dev-deepscry` flag only when the parent dir is
-# present, else empty (a no-op on machines without the parent harness).
-DEVDEEPSCRY := $(shell for d in "$$(cd ../.. >/dev/null 2>&1 && pwd)" "$$HOME/work/dev-deepscry" /mnt/wsl/BWSLDatabtrfsvolumevhdx/deepscry; do \
-		if [ -d "$$d/worktrees" ]; then echo "$$d"; break; fi; \
+# Resolves to a `-v <REALPATH>:/dev-deepscry` flag only when a candidate dir that
+# CONTAINS worktrees/ is found, else empty (a no-op on machines without the
+# harness).
+#
+# Layout note: this .devcontainer lives at <project>/.claude_template/.devcontainer,
+# so .. is the claude_template submodule, ../.. is the PROJECT checkout (which has
+# NO worktrees/), and ../../.. is the PARENT harness (which DOES have worktrees/).
+# The $HOME/work/dev-deepscry path is commonly a SYMLINK to the real harness, so
+# every candidate is passed through `readlink -f` to give podman/docker the REAL
+# absolute path (a bind-mount source must be a real path, not a symlink).
+DEVDEEPSCRY := $(shell for d in ../../.. ../.. "$$HOME/work/dev-deepscry" /mnt/wsl/BWSLDatabtrfsvolumevhdx/deepscry; do \
+		[ -d "$$d" ] || continue; \
+		real=$$(readlink -f "$$d" 2>/dev/null); \
+		[ -n "$$real" ] || continue; \
+		if [ -d "$$real/worktrees" ]; then echo "$$real"; break; fi; \
 	done)
 WORKTREE_MOUNT := $(if $(DEVDEEPSCRY),-v $(DEVDEEPSCRY):/dev-deepscry,)
 
