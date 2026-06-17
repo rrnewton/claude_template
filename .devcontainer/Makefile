@@ -80,6 +80,22 @@ else
     CONTAINER= echo Unsupported_OS && exit 1
 endif
 
+# Make the bind-mounted home WRITABLE for the run user.
+#
+# Under podman ROOTLESS the host uid (e.g. 1000) does NOT map to the in-container
+# `ubuntu` uid by default, so `-v pwd/home:/home/ubuntu` lands owned by a foreign
+# uid and the run user cannot mkdir ~/.codex etc. `--userns=keep-id` maps the
+# invoking host user straight through into the container so the mounted home is
+# owned by — and writable by — the in-container user.
+#
+# Docker Desktop (Mac) maps uids differently and does NOT support/need keep-id,
+# so gate the flag on podman only and leave the Mac path untouched.
+ifeq ($(CONTAINER),podman)
+    USERNS_FLAG = --userns=keep-id
+else
+    USERNS_FLAG =
+endif
+
 # Locate the whole parent dev-deepscry harness so the ENTIRE workspace (the
 # deepscry/ project checkout AND worktrees/, ops/, validate_perf/, ai_docs/, ...)
 # is mounted into the container as $(WORKDIR) — not just the deepscry/ project.
@@ -113,25 +129,33 @@ CLAUDEWORK= $(WORKDIR)
 build: Dockerfile
 	$(CONTAINER) build -t $(FULLTAG) --build-arg CACHEBUST=$(CACHEBUST) --build-arg WORKDIR=$(WORKDIR) .
 
-run:
-	$(CONTAINER) run -it --rm -u $(USER) --hostname $(CONTAINER_HOSTNAME) \
+# Ensure the bind-mounted home exists with sane perms before any run target.
+ensure-home:
+	@mkdir -p ./home && chmod u+rwx ./home
+
+run: ensure-home
+	$(CONTAINER) run -it --rm -u $(USER) --hostname $(CONTAINER_HOSTNAME) $(USERNS_FLAG) \
 		-v `pwd`/home:/home/$(USER) \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
 
-root:
+# NOTE: the root-style targets run `-u root`; under rootless podman container-root
+# already maps to the invoking host user, so the bind-mounted home stays writable
+# WITHOUT --userns=keep-id (which is for the non-root `run` user and is in fact
+# incompatible with `-u root`).
+root: ensure-home
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
 
-root-with-port:
+root-with-port: ensure-home
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) -p 8080:8080 \
 		$(FULLTAG) bash
 
-privileged:
+privileged: ensure-home
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
@@ -275,4 +299,5 @@ info:
 
 
 .PHONY: claude-beads claude-github setup-claude happy run build root pull-main \
-   inside-setup outside-setup install-pat install-ssh-deploy-key side-step rsync sync gh-auth
+   inside-setup outside-setup install-pat install-ssh-deploy-key side-step rsync sync gh-auth \
+   ensure-home root-with-port privileged
