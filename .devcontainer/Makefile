@@ -67,6 +67,13 @@ CONTAINER_HOSTNAME := $(REALHOSTNAME)-$(SLOT)
 
 FULLTAG := $(TAG)-$(SLOT)
 
+# Podman's default pids limit is often 2048, which leaves high-core validation
+# runs mostly idle (`make validate` auto-throttles when /sys/fs/cgroup/pids.max
+# is tight). Use a high finite default so root containers can exercise large
+# machines; override with `make PIDS_LIMIT=... root` if a host needs less/more.
+PIDS_LIMIT ?= 65536
+PIDS_FLAG = --pids-limit=$(PIDS_LIMIT)
+
 # Compute dynamic workspace directory name
 WORKDIR := /$(REPONAME)-$(REALHOSTNAME)
 
@@ -154,18 +161,21 @@ run: ensure-home
 # invoking host user, so their bind-mounted home stays writable.
 root: ensure-home
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+		$(PIDS_FLAG) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
 
 root-with-port: ensure-home
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+		$(PIDS_FLAG) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) -p 8080:8080 \
 		$(FULLTAG) bash
 
 privileged: ensure-home
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+		$(PIDS_FLAG) \
 		-v `pwd`/home:/root \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		--privileged --cap-add=ALL \
