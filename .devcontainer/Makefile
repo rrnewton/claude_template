@@ -129,9 +129,14 @@ CLAUDEWORK= $(WORKDIR)
 build: Dockerfile
 	$(CONTAINER) build -t $(FULLTAG) --build-arg CACHEBUST=$(CACHEBUST) --build-arg WORKDIR=$(WORKDIR) .
 
-# Ensure the bind-mounted home exists with sane perms before any run target.
+# Ensure the bind-mounted home exists before any run target. We only CREATE it if
+# missing; we do NOT hard-fail on chmod. After a `make run`, the entrypoint has
+# chowned ./home to the container user's host SUBUID (inherent to rootless podman
+# without keep-id), so the invoking host user can no longer chmod it — and that is
+# FINE (it is already writable by the container). A failed chmod must not block
+# the next `make run`, so this is best-effort.
 ensure-home:
-	@mkdir -p ./home && chmod u+rwx ./home
+	@mkdir -p ./home; chmod u+rwx ./home 2>/dev/null || true
 
 # `run` starts as ROOT (the default image user) so the ENTRYPOINT can chown the
 # bind-mounted home, then drops to $(USER) via RUN_AS_USER. This avoids the
