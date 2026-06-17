@@ -30,8 +30,8 @@ docker on macOS):
     Dockerfile.postfix  WORKDIR / /workspace symlink
 
 Build it with `make build` (or directly:
-`podman build -t mtg-rs --build-arg WORKDIR=/workspace .`). The pinned image tag
-is `mtg-rs` (from `project_name.txt`).
+`podman build -t deepscry --build-arg WORKDIR=/workspace .`). The pinned image
+tag is `deepscry` (from `project_name.txt`).
 
 Revival note (2026-06-16, mtg-idscc6): base bumped 25.10 -> 26.04 LTS; the
 `happy` (happy-cli) layer and the `gemini-cli` layer were REMOVED (commented out

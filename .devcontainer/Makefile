@@ -80,11 +80,9 @@ else
     CONTAINER= echo Unsupported_OS && exit 1
 endif
 
-# Mount the whole parent dev-deepscry harness (which contains worktrees/, so all
-# agent worktrees are visible inside the container) at /dev-deepscry IF it exists.
-# Resolves to a `-v <REALPATH>:/dev-deepscry` flag only when a candidate dir that
-# CONTAINS worktrees/ is found, else empty (a no-op on machines without the
-# harness).
+# Locate the whole parent dev-deepscry harness so the ENTIRE workspace (the
+# deepscry/ project checkout AND worktrees/, ops/, validate_perf/, ai_docs/, ...)
+# is mounted into the container as $(WORKDIR) — not just the deepscry/ project.
 #
 # Layout note: this .devcontainer lives at <project>/.claude_template/.devcontainer,
 # so .. is the claude_template submodule, ../.. is the PROJECT checkout (which has
@@ -98,7 +96,12 @@ DEVDEEPSCRY := $(shell for d in ../../.. ../.. "$$HOME/work/dev-deepscry" /mnt/w
 		[ -n "$$real" ] || continue; \
 		if [ -d "$$real/worktrees" ]; then echo "$$real"; break; fi; \
 	done)
-WORKTREE_MOUNT := $(if $(DEVDEEPSCRY),-v $(DEVDEEPSCRY):/dev-deepscry,)
+
+# Source dir bind-mounted at $(WORKDIR): the parent harness when found, else fall
+# back to the project checkout (`pwd/..`) so the container still works on a bare
+# project clone with no surrounding harness. The parent IS the deepscry workspace,
+# so mounting it at /$(REPONAME)-$(REALHOSTNAME) is the natural home.
+WORKDIR_MOUNT_SRC := $(if $(DEVDEEPSCRY),$(DEVDEEPSCRY),$$(readlink -f ..))
 
 GOCLAUDE= claude --dangerously-skip-permissions --continue
 
@@ -113,25 +116,25 @@ build: Dockerfile
 run:
 	$(CONTAINER) run -it --rm -u $(USER) --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/home/$(USER) \
-		-v `pwd`/..:$(WORKDIR) $(WORKTREE_MOUNT) \
+		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
 
 root:
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
-		-v `pwd`/..:$(WORKDIR) $(WORKTREE_MOUNT) \
+		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
 
 root-with-port:
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
-		-v `pwd`/..:$(WORKDIR) $(WORKTREE_MOUNT) -p 8080:8080 \
+		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) -p 8080:8080 \
 		$(FULLTAG) bash
 
 privileged:
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root \
-		-v `pwd`/..:$(WORKDIR) $(WORKTREE_MOUNT) \
+		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		--privileged --cap-add=ALL \
 		$(FULLTAG) bash
 
