@@ -66,6 +66,15 @@ else
     CONTAINER= echo Unsupported_OS && exit 1
 endif
 
+# Mount the whole parent dev-deepscry harness (which contains worktrees/, so all
+# agent worktrees are visible inside the container) at /dev-deepscry IF it exists.
+# Resolves to a `-v <parent>:/dev-deepscry` flag only when the parent dir is
+# present, else empty (a no-op on machines without the parent harness).
+DEVDEEPSCRY := $(shell for d in "$$(cd ../.. >/dev/null 2>&1 && pwd)" "$$HOME/work/dev-deepscry" /mnt/wsl/BWSLDatabtrfsvolumevhdx/deepscry; do \
+		if [ -d "$$d/worktrees" ]; then echo "$$d"; break; fi; \
+	done)
+WORKTREE_MOUNT := $(if $(DEVDEEPSCRY),-v $(DEVDEEPSCRY):/dev-deepscry,)
+
 GOCLAUDE= claude --dangerously-skip-permissions --continue
 
 # Always invoke claude from the same space so we don't confuse our claude.json workspace config.
@@ -79,38 +88,40 @@ build: Dockerfile
 run:
 	$(CONTAINER) run -it --rm -u $(USER) --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/home/$(USER) \
-		-v `pwd`/..:$(WORKDIR) \
+		-v `pwd`/..:$(WORKDIR) $(WORKTREE_MOUNT) \
 		$(FULLTAG) bash
 
 root:
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
-		-v `pwd`/..:$(WORKDIR) \
+		-v `pwd`/..:$(WORKDIR) $(WORKTREE_MOUNT) \
 		$(FULLTAG) bash
 
 root-with-port:
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
-		-v `pwd`/..:$(WORKDIR) -p 8080:8080 \
+		-v `pwd`/..:$(WORKDIR) $(WORKTREE_MOUNT) -p 8080:8080 \
 		$(FULLTAG) bash
 
 privileged:
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root \
-		-v `pwd`/..:$(WORKDIR) \
+		-v `pwd`/..:$(WORKDIR) $(WORKTREE_MOUNT) \
 		--privileged --cap-add=ALL \
 		$(FULLTAG) bash
 
 
-# [revival 2026-06-16 mtg-idscc6] Active agent layers: claude + codex (+ copilot).
-# gemini-cli REMOVED (commented, easy to restore by re-adding Dockerfile.gemini).
-AGENT_LAYERS = Dockerfile.claude Dockerfile.codex Dockerfile.copilot
+# [revival 2026-06-16] Active agent layers: claude + codex only. copilot and
+# gemini-cli intentionally NOT preinstalled (commented; restore by re-adding the
+# layer to AGENT_LAYERS).
+AGENT_LAYERS = Dockerfile.claude Dockerfile.codex
+# Dockerfile.copilot
 # Dockerfile.gemini
 
-# [revival 2026-06-16 mtg-idscc6] happy REMOVED. The happy-cli clone+build and
-# its HAPPY_* ENV lines bloated the image and are not currently needed. To
+# [revival 2026-06-16] happy REMOVED (not preinstalled). The happy-cli clone+build
+# and its HAPPY_* ENV lines bloated the image and are not currently needed. To
 # restore: uncomment ONE of the HAPPY_LAYER lines below and add $(HAPPY_LAYER)
-# back into the `cat` recipe.
+# back into the `cat` recipe (and into the `Dockerfile:` recipe args).
 # HAPPY_LAYER = Dockerfile.happy-upstream
 # HAPPY_LAYER = Dockerfile.happy-fork
 

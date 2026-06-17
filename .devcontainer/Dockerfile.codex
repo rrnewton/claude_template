@@ -1,3 +1,5 @@
 
-# [revival 2026-06-16 mtg-idscc6] OpenAI Codex CLI agent (sibling to claude).
-RUN npm install -g @openai/codex
+# [revival 2026-06-16] OpenAI Codex CLI agent (sibling to claude).
+# copilot/gemini/happy are intentionally NOT preinstalled.
+ARG CODEX_VERSION=latest
+RUN npm install -g @openai/codex@${CODEX_VERSION}
