@@ -33,7 +33,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   nano \
   vim \
   wget \
-  curl
+  curl \
+  libatomic1
+  # libatomic1: required at runtime by the Node 26+ prebuilt binary
+  # (libatomic.so.1); Node 24 did not need it.
   # [RRN ] Don't clean because we want to keep apt and I don't mind if claude
   # installs either:
   # && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -45,15 +48,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN apt-get install -y ca-certificates && \
      curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 
-ARG NODE_VERSION=24
+ARG NODE_VERSION=26
 
 RUN . "$HOME/.nvm/nvm.sh" && nvm install ${NODE_VERSION} && \
     nvm alias default ${NODE_VERSION} && nvm use default && \
-    which node && node -v && npm -v 
+    which node && node -v && npm -v
 
-# Hack to discover the minor version: e.g. /bin/versions/node/v24.11.0/bin/node
-RUN cd /bin/versions/node/ && ln -s v24* 24
-ENV PATH=$PATH:/bin/versions/node/24/bin/
+# Hack to discover the minor version: e.g. /bin/versions/node/v26.2.0/bin/node
+# Derive from ${NODE_VERSION} so a future Node bump is a one-line ARG change.
+RUN cd /bin/versions/node/ && ln -s v${NODE_VERSION}* ${NODE_VERSION}
+ENV PATH=$PATH:/bin/versions/node/${NODE_VERSION}/bin/
 
 # Install global packages
 # ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
