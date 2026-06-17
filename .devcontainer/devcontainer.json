@@ -1,3 +1,40 @@
+// DeepScry dev container.
+//
+// [revival 2026-06-16 mtg-idscc6] MULTI-WORKTREE AWARENESS
+// -------------------------------------------------------------------------
+// This checkout can be used in two shapes:
+//
+//   * STANDALONE  — a plain `deepscry` clone, opened on its own. The repo
+//     root IS the workspace; mounting just that checkout is enough.
+//
+//   * MULTI-WORKTREE — `deepscry` is a *submodule* of a bigger "dev-deepscry"
+//     PARENT harness that also holds `worktrees/` (slot checkouts +
+//     `worktrees/ACTIVE.md`) and `experiments/`. To see the registry and
+//     sibling worktrees from inside the container, the PARENT must be mounted,
+//     not just the one checkout.
+//
+// RELIABLE detection check (run from the deepscry checkout root) — multi-worktree
+// iff EITHER of these holds:
+//   1. `git rev-parse --show-superproject-working-tree` is NON-EMPTY
+//      (deepscry is a submodule of the parent), OR
+//   2. the parent dir (`..`) contains `worktrees/ACTIVE.md`.
+// Standalone iff BOTH are absent.
+//
+//   sup=$(git rev-parse --show-superproject-working-tree 2>/dev/null)
+//   if [ -n "$sup" ] || [ -f ../worktrees/ACTIVE.md ]; then echo multi-worktree; else echo standalone; fi
+//
+// The Makefile (`make run`) already does the right thing for BOTH shapes: it
+// mounts `..` (the parent of `.devcontainer`) as the dynamic WORKDIR, so in a
+// multi-worktree layout the parent harness — worktrees/ + ACTIVE.md +
+// experiments/ — is visible. The mounts below mirror that for the VS Code
+// "Reopen in Container" path:
+//
+//   * workspaceMount  -> the opened folder (the deepscry checkout) at /workspace.
+//   * mounts[parent]  -> the dev-deepscry PARENT at /dev-deepscry, so the
+//     worktree registry + experiments are reachable in the multi-worktree case.
+//     In a standalone clone `..` is just the clone's parent dir and the mount is
+//     harmless (nothing in the project depends on it). To DROP it for a strict
+//     standalone setup, delete the `/dev-deepscry` line from `mounts`.
 {
   "name": "Claude Code Sandbox",
   "build": {
@@ -5,8 +42,7 @@
     "args": {
       "TZ": "${localEnv:TZ:America/Los_Angeles}",
       "CLAUDE_CODE_VERSION": "latest",
-      "GIT_DELTA_VERSION": "0.18.2",
-      "ZSH_IN_DOCKER_VERSION": "1.2.0"
+      "WORKDIR": "/workspace"
     }
   },
   "runArgs": [
@@ -27,7 +63,7 @@
         "editor.codeActionsOnSave": {
           "source.fixAll.eslint": "explicit"
         },
-        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.defaultProfile.linux": "bash",
         "terminal.integrated.profiles.linux": {
           "bash": {
             "path": "bash",
@@ -43,11 +79,15 @@
   "remoteUser": "root",
   "mounts": [
     "source=claude-code-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
-    "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume"
+    "source=claude-code-config-${devcontainerId},target=/root/.claude,type=volume",
+    // [multi-worktree] Mount the dev-deepscry PARENT so worktrees/ + ACTIVE.md +
+    // experiments/ are visible from inside the container. See the header note for
+    // the standalone-vs-multi-worktree detection check.
+    "source=${localWorkspaceFolder}/..,target=/dev-deepscry,type=bind,consistency=delegated"
   ],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",
-    "CLAUDE_CONFIG_DIR": "/home/node/.claude",
+    "CLAUDE_CONFIG_DIR": "/root/.claude",
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",

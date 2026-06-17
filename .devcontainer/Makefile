@@ -102,16 +102,22 @@ privileged:
 		$(FULLTAG) bash
 
 
-AGENT_LAYERS = Dockerfile.claude Dockerfile.copilot
+# [revival 2026-06-16 mtg-idscc6] Active agent layers: claude + codex (+ copilot).
+# gemini-cli REMOVED (commented, easy to restore by re-adding Dockerfile.gemini).
+AGENT_LAYERS = Dockerfile.claude Dockerfile.codex Dockerfile.copilot
 # Dockerfile.gemini
 
+# [revival 2026-06-16 mtg-idscc6] happy REMOVED. The happy-cli clone+build and
+# its HAPPY_* ENV lines bloated the image and are not currently needed. To
+# restore: uncomment ONE of the HAPPY_LAYER lines below and add $(HAPPY_LAYER)
+# back into the `cat` recipe.
 # HAPPY_LAYER = Dockerfile.happy-upstream
-HAPPY_LAYER = Dockerfile.happy-fork
+# HAPPY_LAYER = Dockerfile.happy-fork
 
 # Remove Dockerfile.rust if we are not using rust or minibeads:
 OPTIONAL_DOCKER_LAYERS = Dockerfile.rust
 Dockerfile: Dockerfile.*
-	cat Dockerfile.prefix $(HAPPY_LAYER) $(AGENT_LAYERS) $(OPTIONAL_DOCKER_LAYERS) Dockerfile.project Dockerfile.postfix > Dockerfile
+	cat Dockerfile.prefix $(AGENT_LAYERS) $(OPTIONAL_DOCKER_LAYERS) Dockerfile.project Dockerfile.postfix > Dockerfile
 
 # TODO: need a way to pass this into happy on the CLI.
 # It can take an MCP action to change it, but that's lame and wasteful.

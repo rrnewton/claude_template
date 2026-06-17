@@ -1,0 +1,3 @@
+
+# [revival 2026-06-16 mtg-idscc6] OpenAI Codex CLI agent (sibling to claude).
+RUN npm install -g @openai/codex

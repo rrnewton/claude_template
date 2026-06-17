@@ -1,14 +1,22 @@
 
 # Keep it out of the home dir because we will mount that from host:
-RUN apt-get install rustup
+# [revival 2026-06-16 mtg-idscc6] added `update` + `-y` (was bare `apt-get install rustup`).
+RUN apt-get update && apt-get install -y rustup
 ENV CARGO_HOME=/opt/cargo
 ENV RUSTUP_HOME=/opt/multirust
 RUN mkdir -p "$CARGO_HOME" && rustup toolchain install nightly
 # RUN mkdir -p "$CARGO_HOME" && rustup toolchain install stable
 
-# Install my minibeads tool for issue tracking
-RUN cargo install --git https://github.com/rrnewton/minibeads --tag v0.15 && \
+# Install my minibeads tool for issue tracking.
+# [revival 2026-06-16 mtg-idscc6] Was pinned --tag v0.15; now fetch the latest
+# from the default branch so `mb` is always newest (latest tag at revival: v0.17).
+# To re-pin a specific release, swap --branch main for --tag vX.Y.
+RUN cargo install --git https://github.com/rrnewton/minibeads --branch main && \
     ln -s /opt/cargo/bin/mb /opt/cargo/bin/bd
 
 RUN apt-get install -y heaptrack
-RUN cargo install cargo-heaptrack cargo-nextest flamegraph
+# [revival 2026-06-16 mtg-idscc6] nextest now REFUSES `cargo install` without
+# --locked, so it must be a separate invocation (cargo install applies one set
+# of flags to all crates in a single call).
+RUN cargo install cargo-heaptrack flamegraph
+RUN cargo install --locked cargo-nextest

@@ -1,7 +1,8 @@
 
 # [RRN] node image has too old versions for certain packages we use:
 # FROM node:25
-FROM ubuntu:25.10
+# [revival 2026-06-16 mtg-idscc6] Bumped 25.10 (questing, interim) -> 26.04 (resolute, new LTS).
+FROM ubuntu:26.04
 
 # [RRN] TZ confuses happy-coder
 # ARG TZ
