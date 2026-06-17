@@ -1,3 +1,12 @@
+# Entrypoint that makes the bind-mounted home writable for the run user without
+# podman --userns=keep-id (which on some crun versions fails to launch at all,
+# because crun cannot apply the default net.ipv4.ping_group_range sysctl inside a
+# keep-id namespace). The entrypoint starts as root in podman's NORMAL namespace,
+# chowns the run user's home, then drops to that user. See entrypoint.sh.
+COPY entrypoint.sh /usr/local/bin/devcontainer-entrypoint.sh
+RUN chmod +x /usr/local/bin/devcontainer-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint.sh"]
+
 # Set the working directory to the custom WORKDIR
 # Create /workspace as a symlink to WORKDIR (for backward compatibility)
 # Only create symlink if WORKDIR is not /workspace

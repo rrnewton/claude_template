@@ -84,17 +84,17 @@ endif
 #
 # Under podman ROOTLESS the host uid (e.g. 1000) does NOT map to the in-container
 # `ubuntu` uid by default, so `-v pwd/home:/home/ubuntu` lands owned by a foreign
-# uid and the run user cannot mkdir ~/.codex etc. `--userns=keep-id` maps the
-# invoking host user straight through into the container so the mounted home is
-# owned by — and writable by — the in-container user.
+# uid and the run user cannot mkdir ~/.codex etc.
 #
-# Docker Desktop (Mac) maps uids differently and does NOT support/need keep-id,
-# so gate the flag on podman only and leave the Mac path untouched.
-ifeq ($(CONTAINER),podman)
-    USERNS_FLAG = --userns=keep-id
-else
-    USERNS_FLAG =
-endif
+# We do NOT use `--userns=keep-id` to fix this: on some crun versions keep-id
+# makes the container fail to LAUNCH AT ALL, because crun cannot apply podman's
+# default `net.ipv4.ping_group_range` sysctl inside a keep-id user namespace
+# ("write to /proc/sys/net/ipv4/ping_group_range: Invalid argument"). Instead the
+# image ENTRYPOINT (entrypoint.sh) starts as root in podman's NORMAL rootless
+# namespace — the same namespace `make root` already uses successfully, where the
+# default sysctls apply cleanly — chowns the run user's home so it is writable,
+# then drops privileges to that user. The target user is passed via RUN_AS_USER.
+RUN_AS_FLAG = -e RUN_AS_USER=$(USER)
 
 # Locate the whole parent dev-deepscry harness so the ENTIRE workspace (the
 # deepscry/ project checkout AND worktrees/, ops/, validate_perf/, ai_docs/, ...)
@@ -133,16 +133,20 @@ build: Dockerfile
 ensure-home:
 	@mkdir -p ./home && chmod u+rwx ./home
 
+# `run` starts as ROOT (the default image user) so the ENTRYPOINT can chown the
+# bind-mounted home, then drops to $(USER) via RUN_AS_USER. This avoids the
+# keep-id launch failure (see RUN_AS_FLAG comment above) while still landing the
+# user in a writable home as the unprivileged `ubuntu` user.
 run: ensure-home
-	$(CONTAINER) run -it --rm -u $(USER) --hostname $(CONTAINER_HOSTNAME) $(USERNS_FLAG) \
+	$(CONTAINER) run -it --rm --hostname $(CONTAINER_HOSTNAME) $(RUN_AS_FLAG) \
 		-v `pwd`/home:/home/$(USER) \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
 
-# NOTE: the root-style targets run `-u root`; under rootless podman container-root
-# already maps to the invoking host user, so the bind-mounted home stays writable
-# WITHOUT --userns=keep-id (which is for the non-root `run` user and is in fact
-# incompatible with `-u root`).
+# NOTE: the root-style targets run `-u root` and want to STAY root (so they keep
+# the home mounted at /root), so they bypass the entrypoint's drop-to-user by not
+# setting RUN_AS_USER. Under rootless podman container-root already maps to the
+# invoking host user, so their bind-mounted home stays writable.
 root: ensure-home
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
