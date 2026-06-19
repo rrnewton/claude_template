@@ -45,6 +45,24 @@ leaking into the log) count as a BROKEN log even if the mechanical
 state is correct. See §2.2 of the `compatibility_tracking` skill for
 the required-evidence table.
 
+Passing compatibility puzzles must have teeth
+---------------------------------------------
+
+There is zero tolerance for fake passing puzzles. A `.pzl` filed under
+`test_puzzles/passing/` as card compatibility evidence must actually
+execute the card behavior claimed by its path, metadata, comments,
+description, and beads issue, and must include behavior-specific
+assertions that would fail if that card action never happened. A board
+state that never casts, activates, triggers, or applies the named card
+is not smoke coverage; it is false evidence. A golden log by itself is
+only a transcript oracle and can faithfully preserve a no-op.
+
+If the behavior is known broken or cannot yet be asserted, put the
+reproducer under `test_puzzles/broken/` and link the card or bug issue.
+Coordinators must review subagent-created puzzles by reading the `.pzl`
+claim and checking that the script/assertions prove it, not just by
+accepting green puzzle commands.
+
 Compatibility tracking — TWO artifacts
 --------------------------------------
 
