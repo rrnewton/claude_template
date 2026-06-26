@@ -1,11 +1,11 @@
-# Prompt table with equal weights for all prompts
-# Each prompt has weight 1, giving equal probability to all
+# Weighted skill table for `.claude/skills/pick-task/SKILL.md`.
+# Each active line is: <weight> <skill-name>
 
-20   prompts/generic_forward_progress_task.md
-20   prompts/code_elegance_and_correctness.md
-13   prompts/expand_MTG_compatibility.md
-13   prompts/optimization_task.md
-10   prompts/task_gardening.md
-8   prompts/integration_work.md
-8   prompts/heuristic_ai_progress.md
-8   prompts/ignored_tasks.md
+20   generic-forward-progress
+20   code-elegance-and-correctness
+13   expand-mtg-compatibility
+13   optimization-task
+10   task-gardening
+8    ci-integration-monitor
+8    heuristic-ai-progress
+8    ignored-tests-audit
