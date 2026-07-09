@@ -1,10 +1,10 @@
 ---
 title: Reconcile linux-desktop with main and update deepscry integration
-status: open
+status: closed
 priority: 1
 issue_type: task
 created_at: 2026-07-09T13:39:51.797106808+00:00
-updated_at: 2026-07-09T13:39:51.797106808+00:00
+updated_at: 2026-07-09T13:45:15.435472040+00:00
 ---
 
 # Description
