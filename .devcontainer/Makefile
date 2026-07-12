@@ -87,6 +87,14 @@ else
     CONTAINER= echo Unsupported_OS && exit 1
 endif
 
+ifeq ($(CONTAINER),podman)
+    CGROUP_FLAGS=--runtime=crun --cgroupns=private --systemd=always --security-opt unmask=/sys/fs/cgroup
+    CGROUP_ENV_FLAG=$(if $(DEEPSCRY_HOST_CGROUP_NS),-e DEEPSCRY_HOST_CGROUP_NS=$(DEEPSCRY_HOST_CGROUP_NS),)
+else
+    CGROUP_FLAGS=
+    CGROUP_ENV_FLAG=
+endif
+
 # Make the bind-mounted home WRITABLE for the run user.
 #
 # Under podman ROOTLESS the host uid (e.g. 1000) does NOT map to the in-container
@@ -150,7 +158,7 @@ ensure-home:
 # keep-id launch failure (see RUN_AS_FLAG comment above) while still landing the
 # user in a writable home as the unprivileged `ubuntu` user.
 run: ensure-home
-	$(CONTAINER) run -it --rm --hostname $(CONTAINER_HOSTNAME) $(RUN_AS_FLAG) \
+	$(CONTAINER) run -it --rm --hostname $(CONTAINER_HOSTNAME) $(RUN_AS_FLAG) $(CGROUP_FLAGS) $(CGROUP_ENV_FLAG) \
 		-v `pwd`/home:/home/$(USER) \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
@@ -160,21 +168,21 @@ run: ensure-home
 # setting RUN_AS_USER. Under rootless podman container-root already maps to the
 # invoking host user, so their bind-mounted home stays writable.
 root: ensure-home
-	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) $(CGROUP_FLAGS) $(CGROUP_ENV_FLAG) \
 		$(PIDS_FLAG) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
 
 root-with-port: ensure-home
-	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) $(CGROUP_FLAGS) $(CGROUP_ENV_FLAG) \
 		$(PIDS_FLAG) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) -p 8080:8080 \
 		$(FULLTAG) bash
 
 privileged: ensure-home
-	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) $(CGROUP_FLAGS) $(CGROUP_ENV_FLAG) \
 		$(PIDS_FLAG) \
 		-v `pwd`/home:/root \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
