@@ -42,6 +42,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   # installs either:
   # && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+ARG TZ_NAME=America/New_York
+RUN ln -sf /usr/share/zoneinfo/$TZ_NAME /etc/localtime && echo $TZ_NAME > /etc/timezone
+
 # Installs a TON of stufF:
 # RUN apt-get install -y npm
 
