@@ -1,0 +1,3 @@
+# Remote development clients used to reconnect to long-running agent sessions.
+RUN npm install -g @happier-dev/cli && \
+    npm install -g happy

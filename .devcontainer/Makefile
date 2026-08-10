@@ -74,6 +74,13 @@ FULLTAG := $(TAG)-$(SLOT)
 PIDS_LIMIT ?= 65536
 PIDS_FLAG = --pids-limit=$(PIDS_LIMIT)
 
+# Keep the primary development container below the host's memory-pressure
+# threshold. Restart it after crashes/OOM kills, but not after an intentional
+# shell exit.
+ROOT_MEMORY_LIMIT ?= 80g
+ROOT_LIFECYCLE_FLAGS = --memory=$(ROOT_MEMORY_LIMIT) \
+	--cgroup-conf=memory.swap.max=0 --restart=on-failure
+
 # Compute dynamic workspace directory name
 WORKDIR := /$(REPONAME)-$(REALHOSTNAME)
 
@@ -160,8 +167,9 @@ run: ensure-home
 # setting RUN_AS_USER. Under rootless podman container-root already maps to the
 # invoking host user, so their bind-mounted home stays writable.
 root: ensure-home
-	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+	$(CONTAINER) run -it -u root --hostname $(CONTAINER_HOSTNAME) \
 		$(PIDS_FLAG) \
+		$(ROOT_LIFECYCLE_FLAGS) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
@@ -182,17 +190,13 @@ privileged: ensure-home
 		$(FULLTAG) bash
 
 
-# [revival 2026-06-16] Active agent layers: claude + codex only. copilot and
-# gemini-cli intentionally NOT preinstalled (commented; restore by re-adding the
-# layer to AGENT_LAYERS).
-AGENT_LAYERS = Dockerfile.claude Dockerfile.codex
+# Active agent layers. Copilot and Gemini remain opt-in.
+AGENT_LAYERS = Dockerfile.claude Dockerfile.codex Dockerfile.happier
 # Dockerfile.copilot
 # Dockerfile.gemini
 
-# [revival 2026-06-16] happy REMOVED (not preinstalled). The happy-cli clone+build
-# and its HAPPY_* ENV lines bloated the image and are not currently needed. To
-# restore: uncomment ONE of the HAPPY_LAYER lines below and add $(HAPPY_LAYER)
-# back into the `cat` recipe (and into the `Dockerfile:` recipe args).
+# Historical source-build variants, retained for reference. The active
+# Dockerfile.happier layer installs the published npm packages instead.
 # HAPPY_LAYER = Dockerfile.happy-upstream
 # HAPPY_LAYER = Dockerfile.happy-fork
 
