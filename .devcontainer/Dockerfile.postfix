@@ -5,6 +5,30 @@
 # chowns the run user's home, then drops to that user. See entrypoint.sh.
 COPY entrypoint.sh /usr/local/bin/devcontainer-entrypoint.sh
 RUN chmod +x /usr/local/bin/devcontainer-entrypoint.sh
+
+# ---------------------------------------------------------------------------
+# Automatic provisioning (ds-3ij3j4).
+#
+# Only $HOME is persistent here; `/` is an overlay discarded on every container
+# recreation, and PID 1 is a plain bash so NOTHING starts a daemon at boot.
+# Static tools are therefore BAKED into the image layers above (they come back
+# with the image), and everything that genuinely cannot be baked -- starting the
+# cron daemon, running the project's own data-plane hook -- is done by
+# provision.sh, which the ENTRYPOINT runs on EVERY container start.
+#
+# container-paths.sh is the SINGLE definition of this container's PATH, so a
+# login shell and a cron job see the same tools an agent shell sees. Verify any
+# tool the way cron will: `env -i bash -lc 'command -v <tool>'`.
+# ---------------------------------------------------------------------------
+COPY container-paths.sh /usr/local/lib/devcontainer/paths.sh
+COPY profile.d/10-devcontainer-path.sh            /etc/profile.d/10-devcontainer-path.sh
+COPY profile.d/20-devcontainer-provision-status.sh /etc/profile.d/20-devcontainer-provision-status.sh
+COPY provision.sh /usr/local/bin/devcontainer-provision.sh
+RUN chmod +x /usr/local/bin/devcontainer-provision.sh && \
+    chmod 0644 /usr/local/lib/devcontainer/paths.sh \
+               /etc/profile.d/10-devcontainer-path.sh \
+               /etc/profile.d/20-devcontainer-provision-status.sh
+
 ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint.sh"]
 
 # Set the working directory to the custom WORKDIR
@@ -15,3 +39,8 @@ RUN if [ "$WORKDIR" != "/workspace" ]; then \
       ln -s ${WORKDIR} /workspace; \
     fi
 WORKDIR ${WORKDIR}
+
+# Publish the workspace path at RUNTIME so provision.sh can find the mounted
+# project's own provisioning hook (<WORKDIR>/ops/bootstrap-container.sh). A
+# build ARG alone is not visible to a running container.
+ENV DEVCONTAINER_WORKDIR=${WORKDIR}

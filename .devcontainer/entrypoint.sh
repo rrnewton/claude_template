@@ -17,6 +17,42 @@
 # chown, so we simply exec the command — no failure, just best-effort.
 set -e
 
+# ---------------------------------------------------------------------------
+# Provision the container before handing control to the requested command
+# (ds-3ij3j4).
+#
+# Only $HOME is persistent on these hosts and there is no init system, so a
+# freshly recreated container starts with no cron daemon and none of the
+# runtime state the project's data plane needs. devcontainer-provision.sh is
+# idempotent and does the pieces that genuinely cannot be baked into the image.
+#
+# Deliberately NON-FATAL: a provisioning failure must never leave the user
+# unable to get a shell and debug it. It fails LOUDLY instead --
+#   * a banner here,
+#   * /run/devcontainer/status set to "failed" plus a report,
+#   * a red banner on every interactive login until it is fixed
+#     (/etc/profile.d/20-devcontainer-provision-status.sh),
+#   * `devcontainer-provision.sh --check` exits nonzero.
+#
+# HOME is passed explicitly because it decides where the PERSISTENT tool
+# prefix ($HOME/local/node) is created, and that differs between the two run
+# shapes: `make root` keeps root's home, `make run` drops to $RUN_AS_USER.
+# ---------------------------------------------------------------------------
+provision_container() {
+    target_home="$1"
+    [ "$(id -u)" = "0" ] || return 0
+    [ -x /usr/local/bin/devcontainer-provision.sh ] || return 0
+    if ! HOME="$target_home" /usr/local/bin/devcontainer-provision.sh --quiet; then
+        echo "" >&2
+        echo "############################################################" >&2
+        echo "## CONTAINER PROVISIONING FAILED -- see the report above.  ##" >&2
+        echo "## Scheduled jobs and/or baked tools are NOT usable.       ##" >&2
+        echo "## Re-run: devcontainer-provision.sh                       ##" >&2
+        echo "############################################################" >&2
+        echo "" >&2
+    fi
+}
+
 if [ -n "$RUN_AS_USER" ] && [ "$(id -u)" = "0" ]; then
     home="$(getent passwd "$RUN_AS_USER" | cut -d: -f6)"
     uid="$(id -u "$RUN_AS_USER")"
@@ -29,9 +65,12 @@ if [ -n "$RUN_AS_USER" ] && [ "$(id -u)" = "0" ]; then
             chown -R "$uid:$gid" "$home" 2>/dev/null || chown "$uid:$gid" "$home"
         fi
     fi
+    provision_container "${home:-$HOME}"
     # Drop to the unprivileged user, preserving a login-ish environment.
     exec setpriv --reuid "$uid" --regid "$gid" --init-groups \
         env HOME="$home" USER="$RUN_AS_USER" LOGNAME="$RUN_AS_USER" "$@"
 fi
+
+provision_container "$HOME"
 
 exec "$@"
