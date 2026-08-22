@@ -92,6 +92,12 @@
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
-  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  // Belt and braces: the image ENTRYPOINT already provisions the container on
+  // every start (ds-3ij3j4), but the VS Code "Reopen in Container" path is
+  // worth covering explicitly. devcontainer-provision.sh is idempotent.
+  // It fails LOUDLY rather than silently: a nonzero exit here surfaces in the
+  // devcontainer log, and every interactive shell then shows a red banner
+  // until it is fixed.
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh && sudo /usr/local/bin/devcontainer-provision.sh",
   "waitFor": "postStartCommand"
 }

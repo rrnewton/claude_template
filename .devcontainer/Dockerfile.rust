@@ -19,3 +19,11 @@ RUN apt-get install -y heaptrack
 # cargo install applies one set of flags to all crates in the call).
 RUN cargo install cargo-heaptrack flamegraph
 RUN cargo install --locked cargo-nextest
+
+# mdbook builds the user guide that scripts/deploy-cloud.sh ships with the site.
+# BAKED, not hand-installed (ds-3ij3j4): an mdbook dropped into $HOME/bin looks
+# present from an agent shell -- whose PATH is richer -- and is invisible to the
+# deploy script and to cron, so the deploy fails with "mdbook not found on PATH"
+# on a box where `command -v mdbook` had just answered happily.
+# Verify the way the rest of the system sees it: env -i bash -lc 'command -v mdbook'
+RUN cargo install --locked mdbook

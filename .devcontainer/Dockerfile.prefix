@@ -35,9 +35,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   tmux \
   wget \
   curl \
-  libatomic1
+  libatomic1 \
+  cron \
+  rsync
   # libatomic1: required at runtime by the Node 26+ prebuilt binary
   # (libatomic.so.1); Node 24 did not need it.
+  #
+  # cron + rsync are NOT optional extras, they are BAKED ON PURPOSE (ds-3ij3j4).
+  #   cron:  `/` is an overlay that is discarded on container recreation and
+  #          there is no init system, so a hand `apt-get install cron` silently
+  #          evaporates. On 2026-07-21 exactly that happened and the production
+  #          Cloudflare D1 user-database backup did not run for a month.
+  #          The DAEMON still has to be started explicitly -- provision.sh does
+  #          that on every container start.
+  #   rsync: a hard requirement of the project's scripts/deploy-cloud.sh; without
+  #          it this host simply cannot deploy.
   # [RRN ] Don't clean because we want to keep apt and I don't mind if claude
   # installs either:
   # && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -117,6 +129,21 @@ RUN apt-get install -y time parallel hyperfine bc emacs gnuplot psmisc ssh
 RUN apt-get install -y python3 pip python3-venv
 RUN python3 -m venv /opt/venv
 RUN /opt/venv/bin/python3 -m pip install uv
+
+# Bake the Python packages the dev harness and the validation scheduler need.
+# /opt/venv lives on the discarded overlay, so a `pip install` done inside a
+# running container is EPHEMERAL: it vanishes on the next recreation, and the
+# ops state loader then crashes on every tick and silently falls back to
+# defaults (that is exactly what PyYAML going missing did -- ds-3ij3j4), while
+# `make harness-test` / `make python-typecheck` cannot run at all (ds-gydnh5).
+#   PyYAML  - safe_ci_dag_runner / the ops state loader
+#   pytest  - make harness-test
+#   mypy    - make python-typecheck
+#   pandas  - experiment/plotting scripts
+# `make setup` still installs the version-PINNED extras (notably playwright,
+# which must match web/package.json exactly); this layer covers only the
+# unpinned always-needed set.
+RUN /opt/venv/bin/python3 -m pip install PyYAML pytest mypy pandas
 # End shared, non-project configuration.
 
 # Create workspace and config directories and set permissions

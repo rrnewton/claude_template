@@ -67,6 +67,11 @@ CONTAINER_HOSTNAME := $(REALHOSTNAME)-$(SLOT)
 
 FULLTAG := $(TAG)-$(SLOT)
 
+# A STABLE container name, so "which container am I in / how do I get back to
+# it / how do I replace it" all have obvious answers. Without a name podman
+# invents a random one and rebuild-and-relaunch becomes a scavenger hunt.
+CONTAINER_NAME ?= $(FULLTAG)
+
 # Podman's default pids limit is often 2048, which leaves high-core validation
 # runs mostly idle (`make validate` auto-throttles when /sys/fs/cgroup/pids.max
 # is tight). Use a high finite default so root containers can exercise large
@@ -166,23 +171,95 @@ run: ensure-home
 # the home mounted at /root), so they bypass the entrypoint's drop-to-user by not
 # setting RUN_AS_USER. Under rootless podman container-root already maps to the
 # invoking host user, so their bind-mounted home stays writable.
-root: ensure-home
-	$(CONTAINER) run -it -u root --hostname $(CONTAINER_HOSTNAME) \
+root: ensure-home check-name-free
+	$(CONTAINER) run -it -u root --name $(CONTAINER_NAME) --hostname $(CONTAINER_HOSTNAME) \
 		$(PIDS_FLAG) \
 		$(ROOT_LIFECYCLE_FLAGS) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
 
+# ===========================================================================
+# Rebuild / relaunch / verify  (ds-3ij3j4)
+# ===========================================================================
+# `make cycle` is the one command: rebuild the image, replace the running
+# container with a fresh one, and land in a shell that is already fully
+# provisioned (cron daemon started, project data-plane hook run).
+#
+# Why the ceremony matters: only $HOME survives a recreation. Everything under
+# `/` comes back exactly as the IMAGE built it, and anything installed by hand
+# into a running container is thrown away. See README.md -> "What survives a
+# container recreation".
+
+# Refuse to silently collide with an existing container of the same name --
+# that container might have live agents in it.
+check-name-free:
+	@if $(CONTAINER) ps -a --format '{{.Names}}' 2>/dev/null | grep -qx '$(CONTAINER_NAME)'; then \
+		echo "error: a container named '$(CONTAINER_NAME)' already exists:"; \
+		$(CONTAINER) ps -a --filter 'name=$(CONTAINER_NAME)' \
+			--format '         {{.Names}}   {{.Status}}   {{.Image}}' 2>/dev/null; \
+		echo ""; \
+		echo "  get a shell in it :  make attach"; \
+		echo "  REPLACE it        :  make relaunch      (stops and DELETES it)"; \
+		exit 1; \
+	fi
+
+# Open another shell in the already-running container (does NOT re-run the
+# entrypoint, so it does not re-provision -- use `make provision` for that).
+attach:
+	$(CONTAINER) exec -it $(CONTAINER_NAME) bash
+
+# Rebuild the image from the current Dockerfile fragments.
+rebuild:
+	rm -f Dockerfile
+	$(MAKE) build
+
+# Same, ignoring the layer cache (use when an `apt-get`/`npm`/`cargo` layer
+# needs to re-resolve to current upstream versions).
+rebuild-nocache:
+	rm -f Dockerfile
+	$(MAKE) Dockerfile
+	$(CONTAINER) build --no-cache -t $(FULLTAG) --build-arg WORKDIR=$(WORKDIR) .
+
+# Stop and DELETE the named container, then start a fresh one from the current
+# image. Destructive by design: anything installed by hand into the old
+# container is lost (it was never durable in the first place).
+relaunch: ensure-home
+	@echo "==> replacing container '$(CONTAINER_NAME)' (anything not in \$$HOME or the image is discarded)"
+	-$(CONTAINER) rm -f -t 10 $(CONTAINER_NAME)
+	$(MAKE) root
+
+# The whole cycle in one command.
+cycle: rebuild relaunch
+
+# THE single verifiable "is this container fully provisioned?" check.
+# Exits nonzero and says exactly what is wrong if it is not.
+# Works both from the host and from inside the container.
+provision-check:
+	@if [ -n "$$DEVCONTAINER" ]; then \
+		/usr/local/bin/devcontainer-provision.sh --check; \
+	else \
+		$(CONTAINER) exec $(CONTAINER_NAME) /usr/local/bin/devcontainer-provision.sh --check; \
+	fi
+
+# Re-run provisioning by hand (idempotent). Normally unnecessary: the
+# entrypoint does this on every container start.
+provision:
+	@if [ -n "$$DEVCONTAINER" ]; then \
+		/usr/local/bin/devcontainer-provision.sh; \
+	else \
+		$(CONTAINER) exec $(CONTAINER_NAME) /usr/local/bin/devcontainer-provision.sh; \
+	fi
+
 root-with-port: ensure-home
-	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+	$(CONTAINER) run -it --rm -u root --name $(CONTAINER_NAME)-port --hostname $(CONTAINER_HOSTNAME) \
 		$(PIDS_FLAG) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) -p 8080:8080 \
 		$(FULLTAG) bash
 
 privileged: ensure-home
-	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
+	$(CONTAINER) run -it --rm -u root --name $(CONTAINER_NAME)-priv --hostname $(CONTAINER_HOSTNAME) \
 		$(PIDS_FLAG) \
 		-v `pwd`/home:/root \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
@@ -319,8 +396,18 @@ info:
 	@echo Workdir should be $(WORKDIR)
 	@echo   REALHOSTNAME=$(REALHOSTNAME)
 	@echo   CONTAINER_HOSTNAME=$(CONTAINER_HOSTNAME)
+	@echo   IMAGE=$(FULLTAG)
+	@echo   CONTAINER_NAME=$(CONTAINER_NAME)
+	@echo   MOUNTED AT $(WORKDIR): $(WORKDIR_MOUNT_SRC)
+	@echo ""
+	@echo "  make cycle            rebuild the image + replace the container (the usual command)"
+	@echo "  make rebuild          rebuild the image only"
+	@echo "  make relaunch         replace the container only"
+	@echo "  make attach           another shell in the running container"
+	@echo "  make provision-check  is the running container fully provisioned? (exit 0 = yes)"
 
 
 .PHONY: claude-beads claude-github setup-claude happy run build root pull-main \
    inside-setup outside-setup install-pat install-ssh-deploy-key side-step rsync sync gh-auth \
-   ensure-home root-with-port privileged
+   ensure-home root-with-port privileged \
+   check-name-free attach rebuild rebuild-nocache relaunch cycle provision provision-check info
