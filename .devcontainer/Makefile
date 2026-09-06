@@ -81,6 +81,22 @@ ROOT_MEMORY_LIMIT ?= 80g
 ROOT_LIFECYCLE_FLAGS = --memory=$(ROOT_MEMORY_LIMIT) \
 	--cgroup-conf=memory.swap.max=0 --restart=on-failure
 
+# A Herdr pane supplies these variables to its foreground process. Forward the
+# pane identity into the container and mount the socket directory at a stable
+# container path so the Claude/Codex session hooks can report back to the host
+# Herdr server. Outside Herdr this expands to nothing.
+HERDR_SOCKET_DIR := $(patsubst %/,%,$(dir $(HERDR_SOCKET_PATH)))
+HERDR_SOCKET_NAME := $(notdir $(HERDR_SOCKET_PATH))
+HERDR_CONTAINER_FLAGS = $(if $(filter 0,$(HERDR_INSTALL_INTEGRATIONS)),-e HERDR_INSTALL_INTEGRATIONS=0) \
+	$(if $(and $(HERDR_ENV),$(HERDR_PANE_ID),$(HERDR_SOCKET_PATH)),\
+	-e HERDR_ENV=1 \
+	-e HERDR_PANE_ID=$(HERDR_PANE_ID) \
+	-e HERDR_TAB_ID=$(HERDR_TAB_ID) \
+	-e HERDR_WORKSPACE_ID=$(HERDR_WORKSPACE_ID) \
+	-e HERDR_SOCKET_PATH=/run/host-herdr/$(HERDR_SOCKET_NAME) \
+	-e HERDR_BIN_PATH=/usr/local/bin/herdr \
+	-v $(HERDR_SOCKET_DIR):/run/host-herdr:ro)
+
 # Compute dynamic workspace directory name
 WORKDIR := /$(REPONAME)-$(REALHOSTNAME)
 
@@ -158,6 +174,7 @@ ensure-home:
 # user in a writable home as the unprivileged `ubuntu` user.
 run: ensure-home
 	$(CONTAINER) run -it --rm --hostname $(CONTAINER_HOSTNAME) $(RUN_AS_FLAG) \
+		$(HERDR_CONTAINER_FLAGS) \
 		-v `pwd`/home:/home/$(USER) \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
@@ -170,6 +187,7 @@ root: ensure-home
 	$(CONTAINER) run -it -u root --hostname $(CONTAINER_HOSTNAME) \
 		$(PIDS_FLAG) \
 		$(ROOT_LIFECYCLE_FLAGS) \
+		$(HERDR_CONTAINER_FLAGS) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		$(FULLTAG) bash
@@ -177,6 +195,7 @@ root: ensure-home
 root-with-port: ensure-home
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		$(PIDS_FLAG) \
+		$(HERDR_CONTAINER_FLAGS) \
 		-v `pwd`/home:/root --cap-add PERFMON --cap-add SYS_ADMIN \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) -p 8080:8080 \
 		$(FULLTAG) bash
@@ -184,6 +203,7 @@ root-with-port: ensure-home
 privileged: ensure-home
 	$(CONTAINER) run -it --rm -u root --hostname $(CONTAINER_HOSTNAME) \
 		$(PIDS_FLAG) \
+		$(HERDR_CONTAINER_FLAGS) \
 		-v `pwd`/home:/root \
 		-v $(WORKDIR_MOUNT_SRC):$(WORKDIR) \
 		--privileged --cap-add=ALL \
@@ -191,7 +211,7 @@ privileged: ensure-home
 
 
 # Active agent layers. Copilot and Gemini remain opt-in.
-AGENT_LAYERS = Dockerfile.claude Dockerfile.codex Dockerfile.happier
+AGENT_LAYERS = Dockerfile.claude Dockerfile.codex Dockerfile.herdr Dockerfile.happier
 # Dockerfile.copilot
 # Dockerfile.gemini
 

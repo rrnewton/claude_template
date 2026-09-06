@@ -1,0 +1,19 @@
+# Herdr is both the host terminal multiplexer and the installer for the Claude
+# Code/Codex session hooks. Install the CLI outside HOME: the development
+# container bind-mounts HOME at runtime, which would hide a build-time install
+# under /root/.local/bin.
+ARG HERDR_VERSION=0.8.0
+RUN set -eux; \
+    platform_arch="$(dpkg --print-architecture)"; \
+    case "$platform_arch" in \
+      amd64) herdr_arch=x86_64; herdr_sha=b872ea7e40fa2cb17e857ac9b62b1bf26db7b403c622f5d2f3f5b35f6e9acd28 ;; \
+      arm64) herdr_arch=aarch64; herdr_sha=f647ac66468d9efbc642fe534fb284468f0aea60641606fc008dfc0d82a3ca87 ;; \
+      *) echo "unsupported architecture for Herdr: $platform_arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 3 \
+      "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-${herdr_arch}" \
+      -o /tmp/herdr; \
+    echo "${herdr_sha}  /tmp/herdr" | sha256sum -c -; \
+    install -m 0755 /tmp/herdr /usr/local/bin/herdr; \
+    rm /tmp/herdr; \
+    herdr --version

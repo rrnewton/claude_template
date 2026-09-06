@@ -49,3 +49,7 @@ fi
 alias copilot-yolo='copilot -allow-pall-paths --allow-all-tools'
 
 alias glo="git log --oneline --graph --decorate --all -30"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
