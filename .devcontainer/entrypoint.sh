@@ -17,6 +17,26 @@
 # chown, so we simply exec the command — no failure, just best-effort.
 set -e
 
+warn_if_herdr_socket_unreachable() {
+    if [ "${HERDR_ENV:-}" != "1" ] || [ -z "${HERDR_SOCKET_PATH:-}" ]; then
+        return
+    fi
+    if [ ! -S "$HERDR_SOCKET_PATH" ]; then
+        echo "warning: Herdr socket is not visible at $HERDR_SOCKET_PATH; session hooks cannot report to the host" >&2
+    elif [ ! -w "$HERDR_SOCKET_PATH" ]; then
+        echo "warning: uid $(id -u) cannot connect to Herdr socket $HERDR_SOCKET_PATH; use a root container or configure a socket proxy/user mapping" >&2
+    fi
+}
+
+install_herdr_integrations() {
+    runtime_home="$1"
+    mkdir -p "$runtime_home/.claude" "$runtime_home/.codex"
+    HOME="$runtime_home" CLAUDE_CONFIG_DIR="$runtime_home/.claude" \
+        herdr integration install claude
+    HOME="$runtime_home" CODEX_HOME="$runtime_home/.codex" \
+        herdr integration install codex
+}
+
 if [ -n "$RUN_AS_USER" ] && [ "$(id -u)" = "0" ]; then
     home="$(getent passwd "$RUN_AS_USER" | cut -d: -f6)"
     uid="$(id -u "$RUN_AS_USER")"
@@ -29,9 +49,31 @@ if [ -n "$RUN_AS_USER" ] && [ "$(id -u)" = "0" ]; then
             chown -R "$uid:$gid" "$home" 2>/dev/null || chown "$uid:$gid" "$home"
         fi
     fi
+    if [ "${HERDR_INSTALL_INTEGRATIONS:-1}" != "0" ]; then
+        setpriv --reuid "$uid" --regid "$gid" --init-groups \
+            env HOME="$home" PATH="$PATH" \
+            bash -c 'mkdir -p "$HOME/.claude" "$HOME/.codex" && \
+                CLAUDE_CONFIG_DIR="$HOME/.claude" herdr integration install claude && \
+                CODEX_HOME="$HOME/.codex" herdr integration install codex'
+    fi
+    if [ "${HERDR_ENV:-}" = "1" ] && [ -n "${HERDR_SOCKET_PATH:-}" ]; then
+        setpriv --reuid "$uid" --regid "$gid" --init-groups \
+            env HERDR_ENV="$HERDR_ENV" HERDR_SOCKET_PATH="$HERDR_SOCKET_PATH" \
+            PATH="$PATH" bash -c '
+                if [ ! -S "$HERDR_SOCKET_PATH" ]; then
+                    echo "warning: Herdr socket is not visible at $HERDR_SOCKET_PATH; session hooks cannot report to the host" >&2
+                elif [ ! -w "$HERDR_SOCKET_PATH" ]; then
+                    echo "warning: uid $(id -u) cannot connect to Herdr socket $HERDR_SOCKET_PATH; use a root container or configure a socket proxy/user mapping" >&2
+                fi'
+    fi
     # Drop to the unprivileged user, preserving a login-ish environment.
     exec setpriv --reuid "$uid" --regid "$gid" --init-groups \
         env HOME="$home" USER="$RUN_AS_USER" LOGNAME="$RUN_AS_USER" "$@"
 fi
+
+if [ "${HERDR_INSTALL_INTEGRATIONS:-1}" != "0" ]; then
+    install_herdr_integrations "${HOME:-/root}"
+fi
+warn_if_herdr_socket_unreachable
 
 exec "$@"
