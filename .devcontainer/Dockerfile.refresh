@@ -1,0 +1,28 @@
+
+# Fast-moving tools that should be current in every fresh image.
+#
+# A `latest` tag alone never refreshes anything: the build cache reuses the
+# layer that first resolved it. The Makefile passes TOOLS_CACHEBUST (default:
+# today's date), and every RUN below this ARG re-executes when it changes, so
+# the first `make build` of each day reinstalls these and everything after them
+# (the agent layers). The slow layers (base, rust toolchain, project deps) sit
+# ABOVE this point and stay cached. Force a refresh within a day with
+# `make TOOLS_CACHEBUST=$(date +%s) build`.
+ARG TOOLS_CACHEBUST
+RUN echo "refreshing fast-moving tools (TOOLS_CACHEBUST=${TOOLS_CACHEBUST})"
+
+# GitHub CLI from GitHub's own apt repository; Ubuntu's archive lags by months.
+RUN mkdir -p -m 755 /etc/apt/keyrings && \
+    wget -nv -O /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+      https://cli.github.com/packages/githubcli-archive-keyring.gpg && \
+    chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list && \
+    apt-get update && apt-get install -y gh && gh --version
+
+ARG WRANGLER_VERSION=latest
+RUN npm install -g wrangler@${WRANGLER_VERSION} && wrangler --version
+
+# minibeads (mb) from its default branch. To re-pin, swap --branch main for --tag vX.Y.
+RUN cargo install --force --git https://github.com/rrnewton/minibeads --branch main && \
+    ln -sf /opt/cargo/bin/mb /opt/cargo/bin/bd && mb --version

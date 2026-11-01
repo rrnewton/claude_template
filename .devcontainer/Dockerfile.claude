@@ -12,7 +12,7 @@ ARG CLAUDE_CODE_VERSION=latest
 #  rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
 
 # Install Claude
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} && claude --version
 
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/

@@ -24,10 +24,17 @@ set of fragments together into `Dockerfile`, then builds it (podman on Linux,
 docker on macOS):
 
     Dockerfile.prefix   base image + shared dev tools (Ubuntu 26.04 LTS)
-    $(AGENT_LAYERS)     Dockerfile.claude + Dockerfile.codex + Dockerfile.herdr + Dockerfile.happier
-    Dockerfile.rust     rustup/nightly + minibeads (mb, latest) + profiling tools
+    Dockerfile.rust     rustup/nightly + profiling tools
     Dockerfile.project  project deps (maven, jdk, python plotting, perf)
+    Dockerfile.refresh  daily cache bust; gh (GitHub's apt repo), wrangler, minibeads (mb)
+    $(AGENT_LAYERS)     Dockerfile.claude + Dockerfile.codex + Dockerfile.herdr + Dockerfile.happier
     Dockerfile.postfix  WORKDIR / /workspace symlink
+
+Everything from `Dockerfile.refresh` down re-runs on the first `make build` of
+each day (`TOOLS_CACHEBUST` defaults to the date), so Claude Code, Codex, gh,
+wrangler, mb and the happy clients are current without rebuilding the slow
+layers. `make TOOLS_CACHEBUST=$(date +%s) build` forces it again the same day.
+Herdr stays pinned by version and checksum in `Dockerfile.herdr`.
 
 Build it with `make build` (or directly:
 `podman build -t deepscry --build-arg WORKDIR=/workspace .`). The pinned image

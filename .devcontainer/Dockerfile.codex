@@ -2,4 +2,4 @@
 # [revival 2026-06-16] OpenAI Codex CLI agent (sibling to claude).
 # copilot/gemini/happy are intentionally NOT preinstalled.
 ARG CODEX_VERSION=latest
-RUN npm install -g @openai/codex@${CODEX_VERSION}
+RUN npm install -g @openai/codex@${CODEX_VERSION} && codex --version

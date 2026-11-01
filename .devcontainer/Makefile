@@ -1,6 +1,9 @@
 
 USER=ubuntu
 CACHEBUST=0
+# Re-runs Dockerfile.refresh and the agent layers (claude, codex, herdr, ...)
+# once per day so `latest` really means latest; see Dockerfile.refresh.
+TOOLS_CACHEBUST ?= $(shell date +%F)
 
 TAG := $(shell cat project_name.txt)
 
@@ -155,9 +158,11 @@ GOCLAUDE= claude --dangerously-skip-permissions --continue
 # Now uses the dynamically computed WORKDIR instead of hardcoded /workspace
 CLAUDEWORK= $(WORKDIR)
 
-# `make CACHEBUST="$(date +%s)" build` to force rebuild.
+# `make CACHEBUST="$(date +%s)" build` rebuilds from the project layer down;
+# `make TOOLS_CACHEBUST="$(date +%s)" build` refreshes only the fast-moving tools.
 build: Dockerfile
-	$(CONTAINER) build -t $(FULLTAG) --build-arg CACHEBUST=$(CACHEBUST) --build-arg WORKDIR=$(WORKDIR) .
+	$(CONTAINER) build -t $(FULLTAG) --build-arg CACHEBUST=$(CACHEBUST) \
+		--build-arg TOOLS_CACHEBUST=$(TOOLS_CACHEBUST) --build-arg WORKDIR=$(WORKDIR) .
 
 # Ensure the bind-mounted home exists before any run target. We only CREATE it if
 # missing; we do NOT hard-fail on chmod. After a `make run`, the entrypoint has
@@ -222,8 +227,10 @@ AGENT_LAYERS = Dockerfile.claude Dockerfile.codex Dockerfile.herdr Dockerfile.ha
 
 # Remove Dockerfile.rust if we are not using rust or minibeads:
 OPTIONAL_DOCKER_LAYERS = Dockerfile.rust
-Dockerfile: Dockerfile.*
-	cat Dockerfile.prefix $(AGENT_LAYERS) $(OPTIONAL_DOCKER_LAYERS) Dockerfile.project Dockerfile.postfix > Dockerfile
+# Slow, stable layers first; Dockerfile.refresh busts the cache daily, so the
+# fast-moving tools and the agent layers come after it.
+Dockerfile: Dockerfile.* Makefile
+	cat Dockerfile.prefix $(OPTIONAL_DOCKER_LAYERS) Dockerfile.project Dockerfile.refresh $(AGENT_LAYERS) Dockerfile.postfix > Dockerfile
 
 # TODO: need a way to pass this into happy on the CLI.
 # It can take an MCP action to change it, but that's lame and wasteful.

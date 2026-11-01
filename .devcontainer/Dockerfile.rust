@@ -7,11 +7,7 @@ ENV RUSTUP_HOME=/opt/multirust
 RUN mkdir -p "$CARGO_HOME" && rustup toolchain install nightly
 # RUN mkdir -p "$CARGO_HOME" && rustup toolchain install stable
 
-# Install my minibeads tool for issue tracking.
-# [revival 2026-06-16] Was pinned --tag v0.15; now fetch the latest from the
-# default branch so `mb` is always newest. To re-pin, swap --branch main for --tag vX.Y.
-RUN cargo install --git https://github.com/rrnewton/minibeads --branch main && \
-    ln -s /opt/cargo/bin/mb /opt/cargo/bin/bd
+# minibeads (mb) is installed in Dockerfile.refresh so it stays current.
 
 RUN apt-get install -y heaptrack
 # [revival 2026-06-16] nextest now REFUSES `cargo install` without --locked
