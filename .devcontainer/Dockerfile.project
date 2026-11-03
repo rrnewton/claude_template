@@ -49,3 +49,12 @@ ENV PATH="$PATH:/opt/cargo/bin"
 # /plugin marketplace add steveyegge/beads
 # /plugin install beads
 
+
+# DeepScry validate tools (2026-11-02). A container rebuild without these left
+# 19 of 126 validate steps red with "rust-script ENOENT" and
+# "wasm-bindgen-test-runner is required". wasm-bindgen-cli must match the
+# wasm-bindgen version in DeepScry's Cargo.lock (0.2.106); bump them together.
+ARG WASM_BINDGEN_VERSION=0.2.106
+RUN cargo install --locked rust-script && rust-script --version
+RUN cargo install --locked wasm-bindgen-cli --version ${WASM_BINDGEN_VERSION} && wasm-bindgen --version
+RUN cargo install --locked wasm-pack && wasm-pack --version
