@@ -7,6 +7,12 @@ RUN apt-get update && apt-get install -y maven openjdk-21-jdk-headless
 # For git push and pull:
 RUN apt-get install -y ssh
 
+# Scheduled ops jobs (quota sampling, nightly validate, mirror pin bump, coverage
+# refresh; DeepScry ops/cron-install.sh). The image had no cron, so after a
+# container restart on 2026-11-01 every job silently stopped for three days.
+# entrypoint.sh starts the daemon; re-run ops/cron-install.sh in a NEW container.
+RUN apt-get install -y cron
+
 # For plotting
 RUN apt-get install -y python3-pandas python3-matplotlib
 

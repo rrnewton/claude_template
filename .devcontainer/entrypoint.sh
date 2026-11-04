@@ -17,6 +17,12 @@
 # chown, so we simply exec the command — no failure, just best-effort.
 set -e
 
+# Start cron as root when the image has it (DeepScry's scheduled ops jobs).
+# A daemon already running (a re-entered container) is left alone.
+if [ "$(id -u)" = "0" ] && command -v cron >/dev/null 2>&1 && ! pgrep -x cron >/dev/null 2>&1; then
+    cron || echo "warning: could not start cron; scheduled ops jobs will not run" >&2
+fi
+
 warn_if_herdr_socket_unreachable() {
     if [ "${HERDR_ENV:-}" != "1" ] || [ -z "${HERDR_SOCKET_PATH:-}" ]; then
         return
