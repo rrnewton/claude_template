@@ -13,5 +13,12 @@ RUN apt-get install -y heaptrack
 # [revival 2026-06-16] nextest now REFUSES `cargo install` without --locked
 # (locked-tripwire compile_error), so it must be a separate invocation (a single
 # cargo install applies one set of flags to all crates in the call).
-RUN cargo install cargo-heaptrack flamegraph
+# [2026-11-15] cargo-heaptrack 0.1.0 is installed from its PUBLISHED Cargo.lock,
+# which pins rustix 0.38.4; current nightly rejects that rustix (it enables
+# `rustc_attrs` on nightly and the reserved rustc_layout_scalar_* attributes now
+# error). Build these two profiling tools with the stable toolchain instead,
+# which never probes nightly-only features. The project's own build still uses
+# its rust-toolchain.toml pin.
+RUN rustup toolchain install stable --profile minimal
+RUN cargo +stable install cargo-heaptrack flamegraph
 RUN cargo install --locked cargo-nextest
