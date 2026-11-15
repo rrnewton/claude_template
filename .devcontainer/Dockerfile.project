@@ -11,7 +11,10 @@ RUN apt-get install -y ssh
 # refresh; DeepScry ops/cron-install.sh). The image had no cron, so after a
 # container restart on 2026-11-01 every job silently stopped for three days.
 # entrypoint.sh starts the daemon; re-run ops/cron-install.sh in a NEW container.
-RUN apt-get install -y cron
+# python3-yaml: the DeepScry container healer (ops/container-heal.sh, run by
+# entrypoint.sh on every start) reads its YAML goal state with the system
+# Python; baking it in means a fresh container never needs apt before healing.
+RUN apt-get install -y cron python3-yaml
 
 # For plotting
 RUN apt-get install -y python3-pandas python3-matplotlib

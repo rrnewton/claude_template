@@ -23,6 +23,88 @@ if [ "$(id -u)" = "0" ] && command -v cron >/dev/null 2>&1 && ! pgrep -x cron >/
     cron || echo "warning: could not start cron; scheduled ops jobs will not run" >&2
 fi
 
+# ── Self-healing hook (DeepScry ds-owq2mpr, 2026-11-14) ──────────────────────
+# A project may declare the goal state of its container and ship ONE idempotent
+# healer for it. This entrypoint runs that healer on EVERY container start, so a
+# restarted or recreated container converges back (cron, build tools, agent
+# CLIs, Herdr, the agent team) without a person re-running bootstrap scripts.
+#
+#   DEVCONTAINER_HEAL=0              disable the hook entirely (stated loudly)
+#   DEVCONTAINER_HEAL_HOOK=<path>    the healer (default: $PWD/ops/container-heal.sh,
+#                                    i.e. the workspace mounted at the WORKDIR)
+#   DEVCONTAINER_HEAL_FOREGROUND=1   wait for the start pass before running "$@"
+#   DEVCONTAINER_HEAL_INTERVAL=<s>   tick period in `supervise` mode (default 600)
+#
+# The hook is called as `<hook> start` once and, in `supervise` mode, as
+# `<hook> tick` periodically. Its logs go to ~/.local/state/devcontainer-heal/.
+#
+# `supervise` is the command for the DETACHED service container (`make service`):
+# PID 1 then runs the start pass and a tick loop instead of an interactive shell,
+# exits 0 on SIGTERM (podman stop), and is otherwise never expected to exit.
+# Run the container with --init so zombie reaping is not PID 1's job.
+heal_hook="${DEVCONTAINER_HEAL_HOOK:-$PWD/ops/container-heal.sh}"
+heal_log_dir="${HOME:-/root}/.local/state/devcontainer-heal"
+
+heal_hook_usable() {
+    if [ "${DEVCONTAINER_HEAL:-1}" = "0" ]; then
+        echo "devcontainer: DEVCONTAINER_HEAL=0; NOT running the self-heal hook" >&2
+        return 1
+    fi
+    if [ ! -x "$heal_hook" ]; then
+        echo "warning: no executable self-heal hook at $heal_hook; nothing will repair this container on start" >&2
+        return 1
+    fi
+    mkdir -p "$heal_log_dir"
+}
+
+run_heal_start() { # foreground|background
+    heal_hook_usable || return 0
+    start_log="$heal_log_dir/start-$(date +%Y%m%dT%H%M%S).log"
+    if [ "$1" = "foreground" ]; then
+        echo "devcontainer: self-heal start pass (log $start_log)"
+        "$heal_hook" start >"$start_log" 2>&1 \
+            || echo "warning: self-heal start pass did not converge; see $start_log" >&2
+        tail -n 3 "$start_log"
+    else
+        setsid "$heal_hook" start >"$start_log" 2>&1 </dev/null &
+        echo "devcontainer: self-heal start pass running in the background (log $start_log)"
+    fi
+}
+
+supervise() {
+    sleep_pid=""
+    trap 'echo "devcontainer supervisor: SIGTERM, exiting"; [ -n "$sleep_pid" ] && kill "$sleep_pid" 2>/dev/null; exit 0' TERM INT
+    run_heal_start foreground
+    tick_log="$heal_log_dir/tick.log"
+    while :; do
+        sleep "${DEVCONTAINER_HEAL_INTERVAL:-600}" &
+        sleep_pid=$!
+        wait "$sleep_pid"
+        heal_hook_usable 2>/dev/null || continue
+        if [ -f "$tick_log" ] && [ "$(stat -c %s "$tick_log")" -gt 5000000 ]; then
+            mv -f "$tick_log" "$tick_log.1"
+        fi
+        "$heal_hook" tick >>"$tick_log" 2>&1 || true
+    done
+}
+
+start_pass_or_supervise() {
+    # Root only: the healer installs packages and starts daemons.
+    [ "$(id -u)" = "0" ] || return 0
+    if [ "${1:-}" = "supervise" ]; then
+        supervise
+    elif [ "${DEVCONTAINER_HEAL_FOREGROUND:-0}" = "1" ]; then
+        run_heal_start foreground
+    else
+        run_heal_start background
+    fi
+}
+
+if [ "${1:-}" = "supervise" ] && [ "$(id -u)" != "0" ]; then
+    echo "error: supervise mode must run as root (it installs packages and starts daemons)" >&2
+    exit 1
+fi
+
 warn_if_herdr_socket_unreachable() {
     if [ "${HERDR_ENV:-}" != "1" ] || [ -z "${HERDR_SOCKET_PATH:-}" ]; then
         return
@@ -72,14 +154,17 @@ if [ -n "$RUN_AS_USER" ] && [ "$(id -u)" = "0" ]; then
                     echo "warning: uid $(id -u) cannot connect to Herdr socket $HERDR_SOCKET_PATH; use a root container or configure a socket proxy/user mapping" >&2
                 fi'
     fi
+    start_pass_or_supervise "$@"
     # Drop to the unprivileged user, preserving a login-ish environment.
     exec setpriv --reuid "$uid" --regid "$gid" --init-groups \
         env HOME="$home" USER="$RUN_AS_USER" LOGNAME="$RUN_AS_USER" "$@"
 fi
 
 if [ "${HERDR_INSTALL_INTEGRATIONS:-1}" != "0" ]; then
-    install_herdr_integrations "${HOME:-/root}"
+    install_herdr_integrations "${HOME:-/root}" \
+        || echo "warning: herdr integration install failed; Claude/Codex session hooks may not report to Herdr" >&2
 fi
 warn_if_herdr_socket_unreachable
 
+start_pass_or_supervise "$@"
 exec "$@"
